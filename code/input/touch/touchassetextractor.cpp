@@ -3,17 +3,28 @@
 #include <string.h>
 #include <stdio.h>
 
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
+#include <input/touch/touchplatformpaths.h>
+#endif
+
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 #include <SDL.h>
-#include <SDL_system.h>
 #include <sys/stat.h>
 #include <errno.h>
 #include <unistd.h>
+#endif
+
+#if defined(RAD_ANDROID)
+#include <SDL_system.h>
 #include <android/log.h>
 
 #define TOUCH_ASSET_LOG_TAG "SimpsonsHitAndRun"
 #define TOUCH_ASSET_LOGI(...) __android_log_print(ANDROID_LOG_INFO, TOUCH_ASSET_LOG_TAG, __VA_ARGS__)
 #define TOUCH_ASSET_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TOUCH_ASSET_LOG_TAG, __VA_ARGS__)
+#elif defined(RAD_IOS)
+#define TOUCH_ASSET_LOG_TAG "SimpsonsHitAndRun"
+#define TOUCH_ASSET_LOGI(...) do {} while(0)
+#define TOUCH_ASSET_LOGE(...) do {} while(0)
 #endif
 
 // Increase this when you change bundled touch PNGs and want to force recopy.
@@ -98,7 +109,7 @@ TouchAssetExtractor::~TouchAssetExtractor()
 
 bool TouchAssetExtractor::EnsureAssetsExtracted()
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     return true;
 #else
     if ( mHasRun && !NeedsExtraction() )
@@ -172,14 +183,14 @@ const char* TouchAssetExtractor::GetLastError() const
 
 bool TouchAssetExtractor::BuildOutputRoot()
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     return true;
 #else
-    const char* storagePath = SDL_AndroidGetExternalStoragePath();
+    const char* storagePath = GetTouchWriteBasePath();
 
     if ( storagePath == NULL || storagePath[ 0 ] == '\0' )
     {
-        SetLastError( "SDL_AndroidGetExternalStoragePath returned null/empty." );
+        SetLastError( "GetTouchWriteBasePath returned null/empty." );
         return false;
     }
 
@@ -196,7 +207,7 @@ bool TouchAssetExtractor::BuildOutputRoot()
 
 bool TouchAssetExtractor::NeedsExtraction() const
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     return false;
 #else
     if ( !IsVersionFileValid() )
@@ -204,7 +215,7 @@ bool TouchAssetExtractor::NeedsExtraction() const
         return true;
     }
 
-    const char* storagePath = SDL_AndroidGetExternalStoragePath();
+    const char* storagePath = GetTouchWriteBasePath();
 
     if ( storagePath == NULL || storagePath[ 0 ] == '\0' )
     {
@@ -235,7 +246,7 @@ bool TouchAssetExtractor::NeedsExtraction() const
 
 bool TouchAssetExtractor::CopyKnownAssets()
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     return true;
 #else
     for ( unsigned int i = 0; i < TOUCH_ASSET_FILE_COUNT; ++i )
@@ -252,7 +263,7 @@ bool TouchAssetExtractor::CopyKnownAssets()
 
 bool TouchAssetExtractor::CopyAssetFile( const char* relativePath )
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     (void)relativePath;
     return true;
 #else
@@ -262,7 +273,7 @@ bool TouchAssetExtractor::CopyAssetFile( const char* relativePath )
         return false;
     }
 
-    const char* storagePath = SDL_AndroidGetExternalStoragePath();
+    const char* storagePath = GetTouchWriteBasePath();
 
     if ( storagePath == NULL || storagePath[ 0 ] == '\0' )
     {
@@ -286,10 +297,35 @@ bool TouchAssetExtractor::CopyAssetFile( const char* relativePath )
         return false;
     }
 
+    // Origen del asset. En Android se lee relativo al CWD (assets del APK
+    // expuestos en el files dir). En iOS los PNG van en el bundle; los leemos
+    // desde Resources/touch_controls/ via SDL_GetBasePath().
+#if defined(RAD_IOS)
+    char sourcePath[ MAX_TOUCH_PATH ];
 #if SDL_MAJOR_VERSION < 3
-    SDL_RWops* input = SDL_RWFromFile( relativePath, "rb" );
+    const char* basePath = SDL_GetBasePath();
 #else
-    SDL_IOStream* input = SDL_IOFromFile( relativePath, "rb" );
+    char* basePath = SDL_GetBasePath();
+#endif
+    const char* src = ( basePath != NULL && basePath[ 0 ] != '\0' ) ? basePath : "";
+    snprintf(
+        sourcePath,
+        sizeof( sourcePath ),
+        "%s%s",
+        src,
+        relativePath
+    );
+#if SDL_MAJOR_VERSION >= 3
+    if ( basePath != NULL ) { SDL_free( basePath ); }
+#endif
+#else
+    const char* sourcePath = relativePath;  // Android: CWD-relative
+#endif
+
+#if SDL_MAJOR_VERSION < 3
+    SDL_RWops* input = SDL_RWFromFile( sourcePath, "rb" );
+#else
+    SDL_IOStream* input = SDL_IOFromFile( sourcePath, "rb" );
 #endif
 
     if ( input == NULL )
@@ -387,7 +423,7 @@ bool TouchAssetExtractor::CopyAssetFile( const char* relativePath )
 
 bool TouchAssetExtractor::EnsureDirectory( const char* path ) const
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     (void)path;
     return true;
 #else
@@ -427,7 +463,7 @@ bool TouchAssetExtractor::EnsureDirectory( const char* path ) const
 
 bool TouchAssetExtractor::EnsureParentDirectoryForFile( const char* path ) const
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     (void)path;
     return true;
 #else
@@ -455,7 +491,7 @@ bool TouchAssetExtractor::EnsureParentDirectoryForFile( const char* path ) const
 
 bool TouchAssetExtractor::FileExists( const char* path ) const
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     (void)path;
     return false;
 #else
@@ -471,10 +507,10 @@ bool TouchAssetExtractor::FileExists( const char* path ) const
 
 bool TouchAssetExtractor::WriteVersionFile() const
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     return true;
 #else
-    const char* storagePath = SDL_AndroidGetExternalStoragePath();
+    const char* storagePath = GetTouchWriteBasePath();
 
     if ( storagePath == NULL || storagePath[ 0 ] == '\0' )
     {
@@ -511,10 +547,10 @@ bool TouchAssetExtractor::WriteVersionFile() const
 
 bool TouchAssetExtractor::IsVersionFileValid() const
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     return true;
 #else
-    const char* storagePath = SDL_AndroidGetExternalStoragePath();
+    const char* storagePath = GetTouchWriteBasePath();
 
     if ( storagePath == NULL || storagePath[ 0 ] == '\0' )
     {

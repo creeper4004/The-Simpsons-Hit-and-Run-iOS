@@ -27,6 +27,13 @@
 #include <unistd.h>
 #endif
 
+#ifdef RAD_IOS
+// iOS: el CWD por defecto de SDL2 es el resourcePath del bundle (solo lectura).
+// El motor lee el contenido del juego relativo al CWD, asi que cambiamos al
+// directorio Documents/ (escribible, donde el jugador coloca los assets).
+#include <unistd.h>
+#endif
+
 #ifdef __SWITCH__
 #include <switch.h>
 #endif
@@ -53,6 +60,12 @@ unsigned int sceLibcHeapSize = 16 * 1024 * 1024;
 //========================================
 // Project Includes
 //========================================
+#ifdef RAD_IOS
+// Implementado en code/main/iosdocuments.m (bridge Objective-C que devuelve el
+// directorio Documents/ de la app, sin exponer UIKit al motor C++).
+extern "C" const char* iOSGetDocumentsDir(void);
+#endif
+
 #include <main/game.h>
 #include <main/win32platform.h>
 #include <main/singletons.h>
@@ -93,8 +106,35 @@ static void LogOutputFunction( void *userdata, int category, SDL_LogPriority pri
 // Returns:     win32 return.
 //
 //=============================================================================
+#ifdef RAD_IOS
+// Marca de progreso para diagnosticar el arranque en dispositivo real.
+// Escribe a Documents/ (leible via `devicectl device copy from`).
+extern "C" const char* iOSGetDocumentsDir(void);
+extern "C" void iOSProgress(const char* stage)
+{
+    const char* docs = iOSGetDocumentsDir();
+    char path[ 1024 ] = { 0 };
+    if( docs != NULL && docs[ 0 ] != '\0' ) {
+        snprintf( path, sizeof( path ), "%s/srr2_diag.txt", docs );
+    } else {
+        snprintf( path, sizeof( path ), "/tmp/srr2_diag.txt" );
+    }
+    FILE* f = fopen( path, "a" );
+    if( f != NULL ) {
+        fprintf( f, "%s\n", stage );
+        fclose( f );
+    }
+    // Also surface to the console so `simctl launch --console` shows it.
+    fprintf( stderr, "[SRR2] %s\n", stage );
+    fflush( stderr );
+}
+#endif
+
 extern "C" int main( int argc, char *argv[] )
 {
+#ifdef RAD_IOS
+    iOSProgress( "main:enter" );
+#endif
 #ifdef __SWITCH__
 #ifdef RAD_DEBUG
     socketInitializeDefault();
@@ -115,7 +155,20 @@ extern "C" int main( int argc, char *argv[] )
 #endif
 
 	//LOGI( "Touchpad initialized, mouse disabled.");
-#endif	
+#endif
+
+#ifdef RAD_IOS
+    // El motor lee los assets relativo al CWD; en iOS lo apuntamos al directorio
+    // Documents/ (escribible) en lugar del resourcePath del bundle (solo lectura).
+    const char* docsDir = iOSGetDocumentsDir();
+    if( docsDir != NULL && docsDir[ 0 ] != '\0' ) {
+        if( chdir( docsDir ) != 0 ) {
+            rReleasePrintf( "[iOS] Failed to chdir to Documents (%s): %s\n", docsDir, strerror( errno ) );
+        } else {
+            rReleasePrintf( "[iOS] Working directory set to: %s\n", docsDir );
+        }
+    }
+#endif
 	//
     // Pick out and store command line settings.
     //
@@ -176,11 +229,23 @@ extern "C" int main( int argc, char *argv[] )
     // this case, we exit.
     //
 	
+#ifdef RAD_IOS
+    iOSProgress( "win32:before-InitializeWindow" );
+#endif
     if( !Win32Platform::InitializeWindow() )
     {
+#ifdef RAD_IOS
+        iOSProgress( "win32:InitializeWindow-FAILED (returning 0)" );
+#endif
         return 0;
     }
+#ifdef RAD_IOS
+    iOSProgress( "win32:InitializeWindow-OK" );
+#endif
     Win32Platform::InitializeFoundation();
+#ifdef RAD_IOS
+    iOSProgress( "win32:InitializeFoundation-OK" );
+#endif
 
     srand (Game::GetRandomSeed ());
 
@@ -218,7 +283,13 @@ extern "C" int main( int argc, char *argv[] )
     //
     // Initialize the game.
     //
+#ifdef RAD_IOS
+    iOSProgress( "win32:before-Game-Initialize" );
+#endif
     pGame->Initialize();
+#ifdef RAD_IOS
+    iOSProgress( "win32:Game-Initialize-OK" );
+#endif
 
     HeapMgr()->PopHeap (GMA_PERSISTENT);
 

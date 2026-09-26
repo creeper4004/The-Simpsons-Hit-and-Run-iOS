@@ -18,6 +18,11 @@
 // Includes
 //===========================================================================
 #include <presentation/gui/frontend/guimanagerfrontend.h>
+
+#ifdef RAD_IOS
+extern "C" void iOSProgress(const char* stage);
+#include "../../../../libs/scrooby/src/FeScreen.h"
+#endif
 #include <presentation/gui/guiwindow.h> // for window IDs
 #include <presentation/gui/guisystem.h>
 
@@ -449,9 +454,63 @@ CGuiManagerFrontEnd::Start( CGuiWindow::eGuiWindowID initialWindow )
 
     m_state = GUI_FE_CHANGING_SCREENS; // must be set before calling GotoScreen()
 
+#ifdef RAD_IOS
+    {
+        static char dbuf[ 256 ];
+        snprintf( dbuf, sizeof(dbuf), "fe-start nextScreen=%d memcard=%d initialWindow=%d",
+            (int)m_nextScreen, (int)CGuiManager::s_memcardCheckState, (int)initialWindow );
+        iOSProgress( dbuf );
+    }
+#endif
+
     CGuiScreen* nextScreen = static_cast< CGuiScreen* >( this->FindWindowByID( m_nextScreen ) );
+#ifdef RAD_IOS
+    // The frontend project may not carry every platform screen (e.g. "Splash"
+    // is console-only on some builds). Falling straight through with a NULL
+    // window dereferences inside GotoScreen. Walk a fallback chain of windows
+    // that DO exist so the front end always starts somewhere sane.
+    if( nextScreen == NULL )
+    {
+        static const CGuiWindow::eGuiWindowID fallbacks[] = {
+            CGuiWindow::GUI_SCREEN_ID_MAIN_MENU,
+            CGuiWindow::GUI_SCREEN_ID_INTRO_TRANSITION,
+            CGuiWindow::GUI_SCREEN_ID_LOAD_GAME,
+        };
+        for( unsigned f = 0; f < sizeof(fallbacks)/sizeof(fallbacks[0]); f++ )
+        {
+            if( this->FindWindowByID( fallbacks[ f ] ) != NULL )
+            {
+                m_nextScreen = fallbacks[ f ];
+                nextScreen = static_cast< CGuiScreen* >( this->FindWindowByID( m_nextScreen ) );
+                break;
+            }
+        }
+    }
+    {
+        static char dbuf[ 256 ];
+        snprintf( dbuf, sizeof(dbuf), "fe-gotoscreen id=%d next=%p splash=%p mainmenu=%p",
+            (int)m_nextScreen, (void*)nextScreen,
+            (void*)this->FindWindowByID( CGuiWindow::GUI_SCREEN_ID_SPLASH ),
+            (void*)this->FindWindowByID( CGuiWindow::GUI_SCREEN_ID_MAIN_MENU ) );
+        iOSProgress( dbuf );
+    }
+#endif
     rAssert( nextScreen != NULL );
+    if( nextScreen == NULL )
+    {
+        return;
+    }
     m_pScroobyProject->GotoScreen( nextScreen->GetScroobyScreen(), this );
+#ifdef RAD_IOS
+    {
+        static char dbuf[ 256 ];
+        Scrooby::Screen* csc = m_pScroobyProject->GetCurrentScreen();
+        const char* cname = "(null)";
+        if( csc != NULL ) { FeScreen* fs = dynamic_cast<FeScreen*>( csc ); cname = fs ? fs->GetName() : "(not-fe)"; }
+        snprintf( dbuf, sizeof(dbuf), "fe-after-goto cur=%p name=%s target=%p", csc, cname, (void*)nextScreen->GetScroobyScreen() );
+        iOSProgress( dbuf );
+    }
+#endif
 }
 
 void

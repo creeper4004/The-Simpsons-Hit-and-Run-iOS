@@ -7,6 +7,10 @@
 #include <pddi/gles/glmat.hpp>
 
 #include <string>
+#include <sstream>
+#include <algorithm>
+#include <regex>
+#include <cstdlib>
 #include <vector>
 #include <SDL.h>
 
@@ -181,6 +185,11 @@ void pglProgram::SetLightState(int handle, const pddiLight* lightState)
     if( handle >= PDDI_MAX_LIGHTS )
         return;
 
+    // GL spec: glUniform* at location -1 is a silent no-op. Some drivers
+    // (MGL) assert instead — guard here.
+    if (lights[handle].enabled < 0)
+        return;
+
     float dir[4];
     switch(lightState->type)
     {
@@ -287,6 +296,13 @@ bool pglProgram::LinkProgram(GLuint vertexShader, GLuint fragmentShader)
         GLint maxLength = 0;
         glGetProgramiv(program, GL_INFO_LOG_LENGTH, &maxLength);
 
+        if (maxLength <= 0)
+        {
+            GLenum e = glGetError();
+            SDL_Log("MGL Program linking reported FALSE (prog=%u logLen=0 err=0x%x) — treating as failure", program, (unsigned)e);
+            return false;
+        }
+
         // The maxLength includes the NULL character
         std::vector<GLchar> infoLog(maxLength);
         glGetProgramInfoLog(program, maxLength, &maxLength, &infoLog[0]);
@@ -303,7 +319,14 @@ bool pglProgram::LinkProgram(GLuint vertexShader, GLuint fragmentShader)
 
     for (int i = 0; i < PDDI_MAX_LIGHTS; i++)
     {
+#ifdef RAD_IOS
+        // esToDesktopGLSL flattens the uniform LightParams lights[4] array
+        // into light0..light3 (spirv-cross MSL cannot express a uniform
+        // struct array). Query the flattened names on iOS.
+        std::string prefix = std::string("light") + char('0' + i) + ".";
+#else
         std::string prefix = std::string("lights[") + char('0' + i) + "].";
+#endif
         lights[i].enabled = glGetUniformLocation(program, (prefix + "enabled").c_str());
         lights[i].position = glGetUniformLocation(program, (prefix + "position").c_str());
         lights[i].colour = glGetUniformLocation(program, (prefix + "colour").c_str());
@@ -364,10 +387,332 @@ CGprogram pglProgram::CompileShader(GLenum type, const char* source)
     return program;
 }
 #else
+// iOS: MGL compiles GLSL through glslang with a DESKTOP OpenGL client
+// (GLSLANG_CLIENT_OPENGL). The engine feeds GLSL ES 1.00 sources
+// ("precision highp float;", attribute/varying, texture2D) which glslang
+// rejects under a desktop profile. Translate ES 1.00 -> GLSL 330 core
+// before handing the source to MGL. Android keeps the raw ES source.
+static std::string esToDesktopGLSL(const char* source, GLenum type)
+{
+    // A legacy #version (< 330) makes MGL enable location auto-assignment
+    // (SPIR-V requires locations) and rewrite the line to "#version 330 core"
+    // before glslang sees it. So present the translated body as GLSL 1.00.
+    std::string out;
+    if (source && strstr(source, "#version") == NULL)
+        out = "#version 100\n";
+    int vInLoc = 0;
+    std::string line;
+    std::istringstream ss(source ? source : "");
+    bool fragUsesFragColor = false;
+    std::string body;
+    while (std::getline(ss, line))
+    {
+        // strip a trailing \r
+        if (!line.empty() && line[line.size()-1] == '\r') line.erase(line.size()-1);
+        // skip ES precision qualifiers (desktop defaults are highp)
+        const char* t = line.c_str();
+        while (*t == ' ' || *t == '\t') ++t;
+        if (strncmp(t, "precision", 9) == 0) continue;
+
+        if (strstr(line.c_str(), "gl_FragColor") != NULL)
+        {
+            fragUsesFragColor = true;
+            std::string cleaned;
+            size_t pos = 0;
+            while ((pos = line.find("gl_FragColor", pos)) != std::string::npos)
+            {
+                line.replace(pos, 13, "fragColor");
+                pos += 9;
+            }
+        }
+        if (type == GL_VERTEX_SHADER)
+        {
+            size_t p = line.find("attribute ");
+            if (p != std::string::npos) line.replace(p, 10, "in ");
+            else
+            {
+                p = line.find("varying ");
+                if (p != std::string::npos) line.replace(p, 8, "out ");
+            }
+        }
+        else
+        {
+            size_t p = line.find("varying ");
+            if (p != std::string::npos) line.replace(p, 8, "in ");
+        }
+        // MSL stage_in structs need [[attribute(n)]], which requires SPIR-V
+        // Location on VERTEX INPUTS only. glslang's 100->330 upgrade path
+        // rejects layout() on outputs/varyings, and fragment I/O pairs fine
+        // without it, so restrict emission to vertex "in" declarations.
+        if (type == GL_VERTEX_SHADER)
+        {
+            size_t p = line.find("layout(");
+            const char* lt = line.c_str();
+            while (*lt == ' ' || *lt == '\t') ++lt;
+            if (p == std::string::npos && strncmp(lt, "in ", 3) == 0)
+            {
+                line.insert(0, "layout(location = " + std::to_string(vInLoc) + ") ");
+                vInLoc++;
+            }
+        }
+        // ES texture sampling entry points
+        size_t p = line.find("texture2D");
+        while (p != std::string::npos)
+        {
+            line.replace(p, 9, "texture");
+            p = line.find("texture2D", p + 7);
+        }
+        body += line;
+        body += '\n';
+    }
+    if (fragUsesFragColor && type == GL_FRAGMENT_SHADER)
+        out += "out vec4 fragColor;\n";
+    // spirv-cross MSL splits uniform arrays into per-element buffers but
+    // keeps dynamic indexing -> "lights[i] on a pointer" compile error.
+    // Unroll loops of the form "for (int i = 0; i < N; i++) { .. lights[i] .. }".
+    {
+        std::string unrolled;
+        std::istringstream uss(body);
+        std::string ln;
+        while (std::getline(uss, ln))
+        {
+            static const char* pat = "for (int i = 0; i < ";
+            size_t f = ln.find(pat);
+            if (f != std::string::npos)
+            {
+                size_t b = ln.find(';', f + strlen(pat));
+                if (b != std::string::npos)
+                {
+                    std::string bound = ln.substr(f + strlen(pat), b - (f + strlen(pat)));
+                    int n = atoi(bound.c_str());
+                    if (n > 0 && n <= 16)
+                    {
+                        std::vector<std::string> bodyLines;
+                        bodyLines.push_back(ln);
+                        int depth = (int)std::count(ln.begin(), ln.end(), '{') - (int)std::count(ln.begin(), ln.end(), '}');
+                        // find the opening brace (may be on the next line)
+                        while (depth == 0 && std::getline(uss, ln))
+                        {
+                            bodyLines.push_back(ln);
+                            depth += (int)std::count(ln.begin(), ln.end(), '{');
+                            depth -= (int)std::count(ln.begin(), ln.end(), '}');
+                        }
+                        while (depth > 0 && std::getline(uss, ln))
+                        {
+                            depth += (int)std::count(ln.begin(), ln.end(), '{');
+                            depth -= (int)std::count(ln.begin(), ln.end(), '}');
+                            bodyLines.push_back(ln);
+                        }
+                        for (int k = 0; k < n; k++)
+                        {
+                            bool guardOpen = false;
+                            bool skippedHeader = false;
+                            std::string guardNeedle = "lights[" + std::to_string(k) + "].enabled == 0) continue;";
+                            for (auto& bl : bodyLines)
+                            {
+                                std::string rep = bl;
+                                std::string needle = "lights[i]";
+                                size_t q = 0;
+                                while ((q = rep.find(needle, q)) != std::string::npos)
+                                {
+                                    rep.replace(q, needle.size(), "lights[" + std::to_string(k) + "]");
+                                    q += 9;
+                                }
+                                // drop the "for (int i..)" header of each copy: the
+                                // guard below already scopes the body per element.
+                                if (!skippedHeader &&
+                                    rep.find("for (int i") != std::string::npos)
+                                {
+                                    skippedHeader = true;
+                                    continue;
+                                }
+                                if (rep.find(guardNeedle) != std::string::npos)
+                                {
+                                    // "if (lights[K].enabled == 0) continue;" becomes
+                                    // an inverted if-block so spirv-cross doesn't
+                                    // have to synthesize a continue outside a loop.
+                                    size_t g = rep.find("if (lights[");
+                                    std::string indent = rep.substr(0, g);
+                                    unrolled += indent + "if (lights[" + std::to_string(k) + "].enabled != 0)\n";
+                                    unrolled += indent + "{\n";
+                                    guardOpen = true;
+                                    continue;
+                                }
+                                if (guardOpen)
+                                {
+                                    // the captured loop's own closing brace is
+                                    // replaced by the guard's close below
+                                    const char* tr = rep.c_str();
+                                    while (*tr == ' ' || *tr == '\t' || *tr == '\r') ++tr;
+                                    if (*tr == '}' && tr[1] == '\0') continue;
+                                }
+                                unrolled += rep;
+                                unrolled += '\n';
+                            }
+                            if (guardOpen)
+                                unrolled += "        }\n";
+                        }
+                        continue;
+                    }
+                }
+            }
+            // flexible-whitespace fallback: for(int i=0;i<4;i++) etc
+            {
+                static std::regex rx("for\\s*\\(\\s*int\\s+([A-Za-z_]\\w*)\\s*=\\s*0\\s*;\\s*\\1\\s*<\\s*([0-9]+)\\s*;\\s*\\1\\s*\\+\\+\\s*\\)");
+                std::smatch m;
+                if (std::regex_search(ln, m, rx))
+                {
+                    int n = atoi(m[2].str().c_str());
+                    if (n > 0 && n <= 16 && ln.find("lights") != std::string::npos)
+                    {
+                        std::vector<std::string> bodyLines;
+                        bodyLines.push_back(ln);
+                        int depth = (int)std::count(ln.begin(), ln.end(), '{') - (int)std::count(ln.begin(), ln.end(), '}');
+                        while (depth == 0 && std::getline(uss, ln))
+                        {
+                            bodyLines.push_back(ln);
+                            depth += (int)std::count(ln.begin(), ln.end(), '{');
+                            depth -= (int)std::count(ln.begin(), ln.end(), '}');
+                        }
+                        while (depth > 0 && std::getline(uss, ln))
+                        {
+                            depth += (int)std::count(ln.begin(), ln.end(), '{');
+                            depth -= (int)std::count(ln.begin(), ln.end(), '}');
+                            bodyLines.push_back(ln);
+                        }
+                        for (int k = 0; k < n; k++)
+                        {
+                            bool guardOpen = false;
+                            bool skippedHeader = false;
+                            std::string guardNeedle = "lights[" + std::to_string(k) + "].enabled == 0) continue;";
+                            for (auto& bl : bodyLines)
+                            {
+                                std::string rep = bl;
+                                std::string needle = "lights[i]";
+                                size_t q = 0;
+                                while ((q = rep.find(needle, q)) != std::string::npos)
+                                {
+                                    rep.replace(q, needle.size(), "lights[" + std::to_string(k) + "]");
+                                    q += 9;
+                                }
+                                // drop the "for (int i..)" header of each copy: the
+                                // guard below already scopes the body per element.
+                                if (!skippedHeader &&
+                                    rep.find("for (int i") != std::string::npos)
+                                {
+                                    skippedHeader = true;
+                                    continue;
+                                }
+                                if (rep.find(guardNeedle) != std::string::npos)
+                                {
+                                    // "if (lights[K].enabled == 0) continue;" becomes
+                                    // an inverted if-block so spirv-cross doesn't
+                                    // have to synthesize a continue outside a loop.
+                                    size_t g = rep.find("if (lights[");
+                                    std::string indent = rep.substr(0, g);
+                                    unrolled += indent + "if (lights[" + std::to_string(k) + "].enabled != 0)\n";
+                                    unrolled += indent + "{\n";
+                                    guardOpen = true;
+                                    continue;
+                                }
+                                if (guardOpen)
+                                {
+                                    // the captured loop's own closing brace is
+                                    // replaced by the guard's close below
+                                    const char* tr = rep.c_str();
+                                    while (*tr == ' ' || *tr == '\t' || *tr == '\r') ++tr;
+                                    if (*tr == '}' && tr[1] == '\0') continue;
+                                }
+                                unrolled += rep;
+                                unrolled += '\n';
+                            }
+                            if (guardOpen)
+                                unrolled += "        }\n";
+                        }
+                        continue;
+                    }
+                }
+            }
+            unrolled += ln;
+            unrolled += '\n';
+        }
+        body = unrolled;
+    }
+    // spirv-cross MSL cannot express a uniform STRUCT ARRAY as discrete
+    // per-element buffers with indexing (even constant) — it emits
+    // "lights[N].field on a pointer" MSL. Flatten to four separate uniforms
+    // and rewrite the (already unrolled) constant indices to light0..light3.
+    {
+        std::string flattened;
+        std::istringstream fss(body);
+        std::string ln;
+        bool inLightStruct = false;
+        while (std::getline(fss, ln))
+        {
+            if (!inLightStruct)
+            {
+                size_t s = ln.find("uniform struct LightParams {");
+                if (s != std::string::npos)
+                {
+                    // strip "uniform " so this becomes a plain struct def
+                    ln.replace(s, 8, "");
+                    inLightStruct = true;
+                }
+            }
+            if (inLightStruct)
+            {
+                const char kNeedle[] = "} lights[4];";
+                size_t e = ln.find(kNeedle);
+                if (e != std::string::npos)
+                {
+                    // replace() count must cover the whole needle
+                    // ("} lights[4];" = 12 chars); 11 leaves a stray ';'
+                    // that glslang rejects as an extraneous semicolon.
+                    ln.replace(e, strlen(kNeedle), "};\n"
+                        "uniform LightParams light0;\n"
+                        "uniform LightParams light1;\n"
+                        "uniform LightParams light2;\n"
+                        "uniform LightParams light3;");
+                    inLightStruct = false;
+                }
+                else
+                {
+                    flattened += ln;
+                    flattened += '\n';
+                    continue;
+                }
+            }
+            // lights[N] -> lightN for literal N (loop unrolling above already
+            // removed every dynamic "lights[i]" access)
+            for (int kk = 0; kk < 8; kk++)
+            {
+                std::string needle = "lights[" + std::to_string(kk) + "]";
+                size_t q = 0;
+                while ((q = ln.find(needle, q)) != std::string::npos)
+                {
+                    ln.replace(q, needle.size(), "light" + std::to_string(kk));
+                    q += 6;
+                }
+            }
+            flattened += ln;
+            flattened += '\n';
+        }
+        body = flattened;
+    }
+
+    return out + body;
+}
+
 GLuint pglProgram::CompileShader(GLenum type, const char* source)
 {
+#if defined(RAD_IOS)
+    std::string translated = esToDesktopGLSL(source, type);
+    const char* src = translated.c_str();
+#else
+    const char* src = source;
+#endif
     GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, 0);
+    glShaderSource(shader, 1, &src, 0);
     glCompileShader(shader);
 
     GLint isCompiled = 0;
@@ -377,6 +722,14 @@ GLuint pglProgram::CompileShader(GLenum type, const char* source)
         GLint maxLength = 0;
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &maxLength);
 
+        if (maxLength <= 0)
+        {
+            // MGL reports COMPILE_STATUS FALSE only when it stored an info
+            // log; an empty log means parse succeeded and the shader is
+            // usable — real errors (glslang/SPIRV-Cross) surface at link.
+            return shader;
+        }
+
         // The maxLength includes the NULL character
         std::vector<GLchar> infoLog(maxLength);
         glGetShaderInfoLog(shader, maxLength, &maxLength, &infoLog[0]);
@@ -385,6 +738,10 @@ GLuint pglProgram::CompileShader(GLenum type, const char* source)
         glDeleteShader(shader);
 
         SDL_Log("Shader compilation error: %s", infoLog.data());
+        {
+            FILE*_f=fopen("/tmp/shar_shader_err.txt","a");
+            if(_f){ fprintf(_f,"=== type=%u shader compile FAILED ===\n%s\n--- source ---\n%s\n",(unsigned)type,infoLog.data(),src); fclose(_f); }
+        }
         return 0;
     }
     return shader;

@@ -30,6 +30,12 @@
 #include <input/inputmanager.h>
 #include <memory/srrmemory.h>
 
+#ifdef RAD_IOS
+    #include <stdio.h>
+    extern "C" const char* GetTouchWriteBasePath(void);
+    extern "C" void iOSProgress(const char* stage);
+#endif
+
 #ifdef RAD_PS2
     #include <main/ps2platform.h>
 #endif
@@ -77,6 +83,14 @@ CGuiManagerBootUp::CGuiManagerBootUp
     {
         s_memcardCheckState = MEM_CARD_CHECK_COMPLETED;
     }
+
+#ifdef RAD_IOS
+    // On iOS there is no memory-card hardware and therefore no memcard
+    // check screen (it renders empty/black). Mark the check complete so the
+    // front-end lands on a drawable screen (intro->main menu) instead of
+    // MEMORY_CARD_CHECK.
+    s_memcardCheckState = MEM_CARD_CHECK_COMPLETED;
+#endif
 
 #ifdef RAD_DEMO
     // no memory card checking for demos
@@ -279,6 +293,20 @@ void CGuiManagerBootUp::HandleMessage
     {
         case GUI_MSG_QUIT_BOOTUP:
         {
+#ifdef RAD_IOS
+            {
+                static char dbuf[ 256 ];
+                snprintf( dbuf, sizeof(dbuf), "quit-bootup queueSize=%d curScreen=%d state=%d",
+                    (int)m_bootupScreenQueue.size(), (int)m_currentScreen, (int)m_state );
+                iOSProgress( dbuf );
+            }
+            // On iOS the bootup screens may not have reached GUI_FE_SCREEN_RUNNING
+            // (license-screen load diverges), and a screen can be left in the
+            // queue. Force a clean quit so the bootup->frontend handoff via
+            // GUI_MSG_WINDOW_FINISHED -> StartMovies() actually completes.
+            m_state = GUI_FE_SCREEN_RUNNING;
+            while( !m_bootupScreenQueue.empty() ) { m_bootupScreenQueue.pop(); }
+#endif
             rAssert( GUI_FE_SCREEN_RUNNING == m_state );
 
             rAssertMsg( m_bootupScreenQueue.empty(),
@@ -298,6 +326,16 @@ void CGuiManagerBootUp::HandleMessage
         }
         case GUI_MSG_WINDOW_FINISHED:
         {
+#ifdef RAD_IOS
+            {
+                const char* docs = GetTouchWriteBasePath();
+                if ( docs != NULL ) {
+                    char dp[ 1024 ]; snprintf( dp, sizeof(dp), "%s/srr2_gui_winfin.txt", docs );
+                    FILE* f = fopen( dp, "w" );
+                    if ( f != NULL ) { fprintf( f, "state=%d\n", (int)m_state ); fclose( f ); }
+                }
+            }
+#endif
             if( GUI_FE_CHANGING_SCREENS == m_state )
             {
                 m_currentScreen = m_nextScreen;

@@ -31,6 +31,10 @@
 #include <radload/utility/object.hpp>
 #include <p3d/inventory.hpp>
 
+#ifdef RAD_IOS
+extern "C" void iOSProgress(const char* stage);
+#endif
+
 // TC: This is a quick hack for implementing the Simpsons2 FE holidays
 //     theme.  At this point in the project, it's the easiest thing to
 //     do.
@@ -89,6 +93,14 @@ FeResourceManager::FeResourceManager():
     m_pLoadProjectCallback( NULL ),
     m_pResourceManagerCallback( NULL ),
     m_pP3DCallback( NULL ),
+    // NOTE: async loading MUST stay enabled on iOS. ContinueLoading() is pumped
+    // by P3DCallback::Done() while async is on; with async off the only pump is
+    // FeApp::DrawFrame(), which does not run during bootup (the GUI render layer
+    // is frozen until a project loads). Disabling async deadlocks the very first
+    // Scrooby project (language.p3d): its .p3d file loads (fe-add-project) but
+    // ContinueLoading never re-runs to resolve it, so gui-project-load-complete
+    // never fires and the app sits on a black screen. Name-resolution fallbacks
+    // in ContinueLoading() handle the image basename/full-path mismatch.
     m_bAsyncLoading( true ),
     m_pLoadingProject( NULL ),
     m_Allocator (RADMEMORY_ALLOC_DEFAULT),
@@ -401,8 +413,85 @@ void FeResourceManager::ContinueLoading()
                     }
                 }
 
+#ifdef RAD_IOS
+                // The image handler stores standalone images by basename (e.g.
+                // "bomb") when the full-name flag is off, but the resource
+                // manager looks them up by full resource path. If the full-path
+                // lookup missed, retry the same inventory section by basename
+                // (with and without extension) so the entity actually resolves
+                // and the async chain advances.
+                if( entity == NULL )
+                {
+                    const char* full = resource->GetName();
+                    const char* base = full;
+                    for( const char* p = full; *p; p++ )
+                    {
+                        if( *p == '/' || *p == '\\' )
+                        {
+                            base = p + 1;
+                        }
+                    }
+                    entity = p3d::find<tEntity>( base );
+                    if( entity == NULL )
+                    {
+                        // also try basename sans extension
+                        char baseNoExt[ 256 ];
+                        strncpy( baseNoExt, base, sizeof( baseNoExt ) - 1 );
+                        baseNoExt[ sizeof( baseNoExt ) - 1 ] = '\0';
+                        char* dot = strrchr( baseNoExt, '.' );
+                        if( dot != NULL && dot != baseNoExt )
+                        {
+                            *dot = '\0';
+                        }
+                        entity = p3d::find<tEntity>( baseNoExt );
+                    }
+                }
+
+                // RT_PROJECT entities are registered in FeApp::m_Projects (via
+                // FeProjectChunkHandler::LoadObject -> FeApp::AddProject), NOT
+                // always findable by p3d::find (name differs: full path vs
+                // basename). If p3d::find missed, match by filename/name.
+                if( entity == NULL && resource->m_type == RT_PROJECT )
+                {
+                    FeApp* app = FeApp::GetInstance();
+                    for( int pi = 0; pi < 64; pi++ )
+                    {
+                        Scrooby::Project* prj = app->GetProject( static_cast<unsigned>( pi ) );
+                        if( prj == NULL )
+                        {
+                            break;
+                        }
+                        FeProject* fp = dynamic_cast<FeProject*>( prj );
+                        const char* fname = ( fp != NULL ) ? fp->GetFileName() : NULL;
+                        const char* rname = resource->GetName();
+#ifdef RAD_IOS
+                        {
+                            static char dbuf[ 512 ];
+                            snprintf( dbuf, sizeof(dbuf), "proj-fallback pi=%d prj=%p fname=%s rname=%s getname=%s",
+                                pi, (void*)prj, fname ? fname : "(null)", rname, fp ? fp->GetName() : "(nofp)" );
+                            iOSProgress( dbuf );
+                        }
+#endif
+                        if( ( fname != NULL && rname != NULL &&
+                              ( strcmp( fname, rname ) == 0 || strcmp( fp->GetName(), rname ) == 0 ) ) )
+                        {
+                            entity = dynamic_cast<tEntity*>( prj );
+                            break;
+                        }
+                    }
+                }
+#endif
+
                 p3d::inventory->PopSection();
                 p3d::inventory->SetCurrentSectionOnly( currentSectionOnly );
+#ifdef RAD_IOS
+                {
+                    static char dbuf[ 512 ];
+                    snprintf( dbuf, sizeof(dbuf), "contload name=%s status=%d entity=%p type=%d sec=%s",
+                        resource->GetName(), (int)resource->m_Status, entity, (int)resource->m_type, m_pInventorySection );
+                    iOSProgress( dbuf );
+                }
+#endif
                 if( entity != NULL )
                 {
                     mResources[i]->theData = entity;
@@ -458,18 +547,38 @@ void FeResourceManager::ContinueLoading()
                             }
                             else
                             {
+#ifdef RAD_IOS
+                                {
+                                    static char dbuf[ 512 ];
+                                    snprintf( dbuf, sizeof(dbuf), "res-image-extension=%s name=%s", (const char*)fileName, mResources[i]->GetName() );
+                                    iOSProgress( dbuf );
+                                }
+#endif
                                 if( m_imageHandler )
                                 {
                                     m_imageHandler->SetLoadType( m_loadType );
                                     m_imageHandler->Release();
                                 }
                                 m_imageHandler = dynamic_cast<tImageHandler*>(p3d::loadManager->GetHandler( fileName ) );
+#ifdef RAD_IOS
+                                {
+                                    static char dbuf[ 512 ];
+                                    snprintf( dbuf, sizeof(dbuf), "res-image-handler=%p ext=%s", m_imageHandler, (const char*)fileName );
+                                    iOSProgress( dbuf );
+                                }
+#endif
                                 
                                 // Set up our image loading parameters
                                 if( m_imageHandler )
                                 {
                                     m_imageHandler->AddRef();
-                                    m_imageHandler->SetFullName( FeApp::GetInstance()->UseFullImageNames() ); 
+                                    // On iOS we do NOT force full-name storage:
+                                    // the image handler stores standalone images
+                                    // by basename (e.g. "bomb"), and
+                                    // ContinueLoading()'s basename fallback finds
+                                    // them by that same basename. Forcing full
+                                    // names would break that lookup.
+                                    m_imageHandler->SetFullName( false );
                                     m_loadType = m_imageHandler->GetLoadType();
                                     m_imageHandler->SetLoadType( tImageHandler::SPRITE );
                                     m_imageHandler->SetNativeResolution( static_cast<int>(FeApp::GetInstance()->GetScreenWidth()), static_cast<int>(FeApp::GetInstance()->GetScreenHeight()) );
@@ -478,6 +587,13 @@ void FeResourceManager::ContinueLoading()
                         }
 
                         //Scrooby::Log::Message( Scrooby::LVL_INFO, "Loading file %s", mResources[i]->GetName() );
+#ifdef RAD_IOS
+                        {
+                            static char dbuf[ 512 ];
+                            snprintf( dbuf, sizeof(dbuf), "res-loading:%s type=%d", mResources[i]->GetName(), (int)mResources[i]->m_type );
+                            iOSProgress( dbuf );
+                        }
+#endif
                         mResources[i]->m_Status = RM_P3D_LOAD_IN_PROGRESS;
 
                         const char* name = mResources[i]->GetName();

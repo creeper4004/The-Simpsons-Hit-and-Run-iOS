@@ -191,7 +191,7 @@ target_include_directories(p3d
 
 
 
-if(ANDROID)
+if(ANDROID OR IOS)
     # headers para que encuentre <png.h>
     target_include_directories(p3d PRIVATE ${PNG_INCLUDE_DIR})
 
@@ -205,7 +205,7 @@ if(ANDROID)
         radmath
     )
 
-    message(STATUS "Android: PNG linked for p3d (libpng + zlib)")
+    message(STATUS "Mobile: PNG linked for p3d (libpng + zlib)")
 else()
     target_link_libraries(p3d
         PNG::PNG

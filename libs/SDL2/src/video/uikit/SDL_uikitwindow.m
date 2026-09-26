@@ -63,9 +63,29 @@
 
 - (void)layoutSubviews;
 
+- (instancetype)initWithWindowScene:(UIWindowScene *)windowScene;
+
 @end
 
 @implementation SDL_uikitwindow
+
+/* Scene-based initializer (iOS 18+/Xcode 26+ SDK). UIKit requires UIViews to
+ * be created from a UIWindowScene under the scene lifecycle; SDL normally used
+ * initWithFrame: which no longer attaches a window scene. */
+- (instancetype)initWithWindowScene:(UIWindowScene *)windowScene
+{
+    if (windowScene != nil) {
+        self = [self initWithFrame:windowScene.coordinateSpace.bounds];
+        if (self) {
+            self.windowScene = windowScene;
+            self.frame = windowScene.coordinateSpace.bounds;
+        }
+    } else {
+        /* Fallback to the legacy frame-based initializer (external display). */
+        self = [self initWithFrame:[UIScreen mainScreen].bounds];
+    }
+    return self;
+}
 
 - (void)layoutSubviews
 {
@@ -207,7 +227,20 @@ int UIKit_CreateWindow(_THIS, SDL_Window *window)
 
         /* ignore the size user requested, and make a fullscreen window */
         /* !!! FIXME: can we have a smaller view? */
+#if defined(__IPHONEOS__) || defined(__TVOS__)
+        if ([[UIDevice currentDevice].systemVersion floatValue] >= 18.0f) {
+            /* Scene lifecycle: attach to the UIWindowScene owned by the app
+             * delegate's scene path (set by SDLUIKitSceneDelegate). */
+            SDLUIKitDelegate *delegate = (SDLUIKitDelegate *)[UIApplication sharedApplication].delegate;
+            UIWindow *sceneWin = [delegate sceneWindow];
+            UIWindowScene *ws = sceneWin.windowScene;
+            uiwindow = [[SDL_uikitwindow alloc] initWithWindowScene:ws];
+        } else {
+            uiwindow = [[SDL_uikitwindow alloc] initWithFrame:data.uiscreen.bounds];
+        }
+#else
         uiwindow = [[SDL_uikitwindow alloc] initWithFrame:data.uiscreen.bounds];
+#endif
 
         /* put the window on an external display if appropriate. */
         if (data.uiscreen != [UIScreen mainScreen]) {

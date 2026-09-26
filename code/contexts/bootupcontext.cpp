@@ -21,7 +21,7 @@
 
 
 // COMO EL ARRANQUE DE CINEMATICAS INICIALES DA CRASH EN ANDROID POR AHORA LO SALTAMOS
-#if defined(RAD_RELEASE) && !defined(RAD_E3) && !defined(RAD_ANDROID)
+#if defined(RAD_RELEASE) && !defined(RAD_E3) && !defined(RAD_ANDROID) && !defined(RAD_IOS)
     #define SHOW_MOVIES
 #endif
 
@@ -36,6 +36,10 @@
 #include <p3d/utility.hpp>
 #include <p3d/context.hpp>
 #include <pddi/pddi.hpp>
+
+#ifdef RAD_IOS
+extern "C" void iOSProgress(const char* stage);
+#endif
 
 //========================================
 // Project Includes
@@ -78,6 +82,10 @@
 #ifdef RAD_PC
     #include <main/win32platform.h>
     #include <data/config/gameconfigmanager.h>
+#endif
+#ifdef RAD_IOS
+    #include <stdio.h>
+    extern "C" const char* GetTouchWriteBasePath(void);
 #endif
 
 //******************************************************************************
@@ -145,6 +153,16 @@ BootupContext* BootupContext::GetInstance()
 //=============================================================================
 void BootupContext::StartMovies()
 {
+#ifdef RAD_IOS
+    {
+        const char* docs = GetTouchWriteBasePath();
+        if ( docs != NULL ) {
+            char dp[ 1024 ]; snprintf( dp, sizeof(dp), "%s/srr2_startmovies.txt", docs );
+            FILE* f = fopen( dp, "w" );
+            if ( f != NULL ) { fprintf( f, "SHOW_MOVIES=%d\n", 0 ); fclose( f ); }
+        }
+    }
+#endif
 #ifndef FINAL
     if( CommandLineOptions::Get( CLO_SKIP_FE ) )
     {
@@ -308,6 +326,20 @@ void BootupContext::OnStart( ContextEnum previousContext )
     GetGuiSystem()->Init();
     GetGuiSystem()->RegisterUserInputHandlers();
 
+    // Start the license-screen display clock now. On iOS the license screen
+    // might not fire ResetLicenseScreenDisplayTime() (GUI screen population
+    // can diverge), so seed the timer here; otherwise m_elapsedTime stays -1
+    // and the boot->frontend transition never triggers.
+    ResetLicenseScreenDisplayTime();
+
+#ifdef RAD_IOS
+    {
+        static char dbuf[ 128 ];
+        snprintf( dbuf, sizeof(dbuf), "bootup-onstart-seed elapsed=%d", (int)m_elapsedTime );
+        iOSProgress( dbuf );
+    }
+#endif
+
     GetCardGallery()->Init();
     GetCheatInputSystem()->Init();
     GetTutorialManager()->Initialize();
@@ -405,11 +437,59 @@ void BootupContext::OnStop( ContextEnum nextContext )
 //==============================================================================
 void BootupContext::OnUpdate( unsigned int elapsedTime )
 {
+#ifdef RAD_IOS
+    {
+        static unsigned s_bootDiagCount = 0;
+        if ( ( s_bootDiagCount++ % 200 ) == 0 ) {
+            const char* docs = GetTouchWriteBasePath();
+            if ( docs != NULL ) {
+                char dp[ 1024 ]; snprintf( dp, sizeof(dp), "%s/srr2_boot.txt", docs );
+                FILE* f = fopen( dp, "w" );
+                if ( f != NULL ) {
+                    fprintf( f, "elapsed=%d min=%d bootLoad=%d soundLoad=%d\n",
+                        (int)m_elapsedTime, (int)MINIMUM_LICENSE_SCREEN_DISPLAY_TIME,
+                        (int)m_bootupLoadCompleted, (int)m_soundLoadCompleted );
+                    fclose( f );
+                }
+            }
+        }
+    }
+#endif
     if( m_elapsedTime != -1 )
     {
+#ifdef RAD_IOS
+        // On iOS the sound-system boot load may not complete (audio middleware
+        // not initialized). Do not gate the boot->frontend transition on it,
+        // or the game never leaves the boot-up context.
+        const bool soundReady = true;
+        // The bootup LoadingManager chain DOES complete on iOS now that the
+        // Scrooby loader is async (P3DCallback pumps ContinueLoading). Gate the
+        // transition on BOTH the bootup callback AND the GUI state machine:
+        // the backend/frontend projects are queued by CGuiSystem::Init and must
+        // finish while still in BOOTUP (state=BOOTUP_ACTIVE, FE manager created
+        // against the correct frontend project). Quitting earlier lets
+        // backend.p3d / frontend.p3d complete AFTER the state machine has
+        // advanced to FRONTEND_LOADING, so the front-end manager is created
+        // against the wrong project and the splash screen never starts.
+        const bool bootLoadReady = m_bootupLoadCompleted &&
+            ( GetGuiSystem()->GetCurrentState() == CGuiSystem::BOOTUP_ACTIVE );
+#else
+        const bool soundReady = m_soundLoadCompleted;
+        const bool bootLoadReady = m_bootupLoadCompleted;
+#endif
         if( m_elapsedTime > MINIMUM_LICENSE_SCREEN_DISPLAY_TIME &&
-            m_bootupLoadCompleted && m_soundLoadCompleted )
+            bootLoadReady && soundReady )
         {
+#ifdef RAD_IOS
+            {
+                const char* docs = GetTouchWriteBasePath();
+                if ( docs != NULL ) {
+                    char dp[ 1024 ]; snprintf( dp, sizeof(dp), "%s/srr2_transition.txt", docs );
+                    FILE* f = fopen( dp, "w" );
+                    if ( f != NULL ) { fprintf( f, "QUIT_BOOTUP elapsed=%d bootLoad=%d soundReady=%d\n", (int)m_elapsedTime, (int)m_bootupLoadCompleted, (int)soundReady ); fclose( f ); }
+                }
+            }
+#endif
             // Tell GUI system to quit out of the boot-up state
             GetGuiSystem()->HandleMessage( GUI_MSG_QUIT_BOOTUP );
 
@@ -490,6 +570,21 @@ void BootupContext::OnHandleEvent( EventEnum id, void* pEventData )
 //=============================================================================
 void BootupContext::OnProcessRequestsComplete( void* pUserData )
 {
+#ifdef RAD_IOS
+    {
+        char buf[ 256 ];
+        snprintf( buf, sizeof(buf), "boot-callback pUserData=%p isSound=%d", pUserData, (int)( pUserData == GetSoundManager() ) );
+        iOSProgress( buf );
+    }
+    {
+        const char* docs = GetTouchWriteBasePath();
+        if ( docs != NULL ) {
+            char dp[ 1024 ]; snprintf( dp, sizeof(dp), "%s/srr2_loadcomplete.txt", docs );
+            FILE* f = fopen( dp, "a" );
+            if ( f != NULL ) { fprintf( f, "pUserData=%p isSound=%d\n", pUserData, (int)( pUserData == GetSoundManager() ) ); fclose( f ); }
+        }
+    }
+#endif
     if( pUserData == GetSoundManager() )
     {
         // set flag indicating all sound loads have completed

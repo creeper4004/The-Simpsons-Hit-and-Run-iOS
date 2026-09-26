@@ -79,7 +79,13 @@ void TouchInputModeManager::NotifyGamepadCandidateConnected()
 
 void TouchInputModeManager::NotifyGamepadConnected()
 {
-      /*
+#if defined(RAD_IOS)
+    // iOS sideload is touch-primary; the simulator / SDL may report a
+    // virtual gamepad (keyboard/mouse). Do not switch to gamepad mode or
+    // the touch HUD gets suppressed.
+    return;
+#else
+    /*
      * This now means:
      * A physical gamepad has been CONFIRMED by real input.
      *
@@ -93,6 +99,7 @@ void TouchInputModeManager::NotifyGamepadConnected()
     mGamepadConnected = true;
     mCurrentMode = TOUCH_INPUT_MODE_GAMEPAD;
     mLastGamepadInputTimeMs = mTimeMs;
+#endif
 }
 
 void TouchInputModeManager::NotifyGamepadDisconnected()

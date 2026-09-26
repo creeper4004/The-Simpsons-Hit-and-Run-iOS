@@ -51,20 +51,28 @@
 #include <render/RenderFlow/renderflow.h>
 #include <sound/soundmanager.h>
 #include <input/inputmanager.h>
-#ifdef RAD_WIN32
+#if defined(RAD_WIN32) || defined(RAD_IOS)
 #include <input/touch/touchinputmodemanager.h>
 #include <input/touch/touchinputadapter.h>
 #endif
-#ifdef RAD_ANDROID
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 #include <input/touch/touchcontextresolver.h>
 #include <input/touch/touchhudsystem.h>
 #include <input/touch/touchinputadapter.h>
 #include <worldsim/avatarmanager.h>
 #include <input/touch/touchassetextractor.h>
+#include <input/touch/gameassetextractor.h>
 #include <input/touch/touchassetmanager.h>
 #include <input/touch/touchhudrenderer.h>
-#include <data/config/androidconfigurationmanager.h>
 #include <input/touch/touchcontrolsconfigurationmanager.h>
+#endif
+#ifdef RAD_IOS
+#include <stdio.h>
+extern "C" const char* iOSGetDocumentsDir(void);
+extern "C" void iOSProgress(const char* stage);
+#endif
+#ifdef RAD_ANDROID
+#include <data/config/androidconfigurationmanager.h>
 #endif
 
 #if defined(RAD_ANDROID)
@@ -86,7 +94,7 @@ Game* Game::spInstance = NULL;
 
 bool g_inDemoMode = false;
 
-#ifdef RAD_ANDROID
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 
 static bool GetTouchAvatarInVehicleForPlayer0()
 {
@@ -116,6 +124,17 @@ static void UpdateTouchContextResolverFromGame()
 
     const int currentContext = GetGameFlow()->GetCurrentContext();
     const unsigned inputGameState = InputManager::GetInstance()->GetGameState();
+
+#ifdef RAD_IOS
+    {
+        const char* docs = iOSGetDocumentsDir();
+        if ( docs != NULL ) {
+            char dp[ 1024 ]; snprintf( dp, sizeof(dp), "%s/srr2_ctx.txt", docs );
+            FILE* f = fopen( dp, "w" );
+            if ( f != NULL ) { fprintf( f, "context=%d gameState=%u\n", currentContext, inputGameState ); fclose( f ); }
+        }
+    }
+#endif
 
     bool avatarInVehicle = false;
 
@@ -238,9 +257,9 @@ static void UpdateTouchHudSystemFromSDLEvent( const SDL_Event& msg )
 #endif
 }
 
-#endif // RAD_ANDROID
+#endif // RAD_ANDROID || RAD_IOS
 
-#ifdef RAD_WIN32
+#if defined(RAD_WIN32) || defined(RAD_IOS)
 
 static void UpdateTouchInputModeFromSDLEvent( const SDL_Event& msg )
 {
@@ -393,7 +412,7 @@ static void UpdateTouchInputModeFromSDLEvent( const SDL_Event& msg )
 
 
 
-#endif // RAD_WIN32
+#endif // RAD_WIN32 || RAD_IOS
 
 //#define DEMO_MODE_PROFILER
 
@@ -700,8 +719,17 @@ void Game::Initialize()
 
     // Extraemos el layout tactil contenido en el apk en archivos leibles para que el pure3d mas adelante lo pueda renderizar en el juego 
     //APK->com.c4rlox.simpsons/files/touch_controls/icono.png
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
+    iOSProgress( "game:extract-touch-begin" );
     TouchAssetExtractor::GetInstance().EnsureAssetsExtracted();
+    iOSProgress( "game:extract-touch-done" );
+    #if defined(RAD_IOS)
+    // iOS: copia el arbol de assets del juego (art/, movies/, scripts/, *.rcf,
+    // simpsons.ini) desde el bundle a Documents/ en el primer arranque, para que
+    // el motor (CWD relativo a Documents/) resuelva todo igual que en Android.
+    bool extracted = GameAssetExtractor::GetInstance().EnsureAssetsExtracted();
+    iOSProgress( extracted ? "game:extract-assets-OK" : "game:extract-assets-FAIL" );
+    #endif
     // Realizamos la carga con pure3d de los iconos extraidos anteriormente 
     TouchAssetManager::GetInstance().Initialize();
     // Cargamos la configuración personalizada de controles táctiles del jugador (en caso de que exista) antes de inicializar el sistema de renderizado de iconos 
@@ -709,11 +737,11 @@ void Game::Initialize()
 
     // Realizamos inicializacion del render, pero aqui no es donde solicitamos el renderizado,solo iniciamos el sistema de render
     TouchHudRenderer::GetInstance().Initialize();
+    #endif
 
+    #if defined(RAD_ANDROID)
     // hacemos que se utilice en el ciclo del juego al arrancar la configuración del archivo Simpsons_configuration.txt
     GetAndroidConfigurationManager()->Initialize();
-
-
     #endif
 
     //
@@ -852,24 +880,24 @@ void Game::Run()
         unsigned newTime =  radTimeGetMilliseconds();
         unsigned elapsed = newTime - time;
         time = newTime;
-        #ifdef RAD_ANDROID
+        #if defined(RAD_ANDROID) || defined(RAD_IOS)
         UpdateTouchContextResolverFromGame();
         TouchHudSystem::GetInstance().Update( elapsed );
         #endif
        
 
-        #ifdef RAD_WIN32
+        #if defined(RAD_WIN32) || defined(RAD_IOS)
             TouchInputModeManager::GetInstance().Update( elapsed );
         #endif
         //
         // Service the windows message loop.
         //
-#ifdef RAD_WIN32
+#if defined(RAD_WIN32) || defined(RAD_IOS)
         SDL_Event msg;
         while( SDL_PollEvent( &msg ) )
         {
             UpdateTouchInputModeFromSDLEvent( msg );
-            #ifdef RAD_ANDROID
+            #if defined(RAD_ANDROID) || defined(RAD_IOS)
                 UpdateTouchHudSystemFromSDLEvent( msg );
             #endif
 #if SDL_MAJOR_VERSION < 3

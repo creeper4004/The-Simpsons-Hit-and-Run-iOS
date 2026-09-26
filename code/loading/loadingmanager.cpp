@@ -34,6 +34,10 @@
 
 #include <mission/gameplaymanager.h>
 
+#ifdef RAD_IOS
+extern "C" void iOSProgress(const char* stage);
+#endif
+
 //******************************************************************************
 //
 // Global Data, Local Data, Local Classes
@@ -131,13 +135,27 @@ void LoadingManager::DestroyInstance()
 
 void LoadingManager::AddCallback( LoadingManager::ProcessRequestsCallback* pCallback, void* pUserData)
 {
+#ifdef RAD_IOS
+    {
+        static char dbuf[ 160 ];
+        snprintf( dbuf, sizeof(dbuf), "lm-addcb cancel=%d h=%d t=%d loading=%d cb=%p",
+            (int)mCancellingLoads, (int)mRequestHead, (int)mRequestTail, (int)mLoading, (void*)pCallback );
+        iOSProgress( dbuf );
+    }
+#endif
     if ( mCancellingLoads )
     {
+#ifdef RAD_IOS
+        iOSProgress( "lm-addcb DROPPED(cancel)" );
+#endif
         return;
     }
 
     if(mRequestHead == mRequestTail && !mLoading )
     {
+#ifdef RAD_IOS
+        iOSProgress( "lm-addcb IMMEDIATE-call" );
+#endif
         pCallback->OnProcessRequestsComplete(pUserData);
         return;
     }
@@ -290,6 +308,15 @@ void LoadingManager::AddRequest
 //==============================================================================
 void LoadingManager::OnLoadFileComplete( void* pUserData )
 {
+#ifdef RAD_IOS
+    {
+        // record the file that just finished loading
+        static char buf[ 512 ];
+        LoadingRequest& req = mRequests[mRequestHead];
+        snprintf( buf, sizeof(buf), "load-complete:%s", req.filename );
+        iOSProgress( buf );
+    }
+#endif
     // Display some debug info.
     LoadingRequest& request = mRequests[mRequestHead ];
     rAssert( pUserData == &request );

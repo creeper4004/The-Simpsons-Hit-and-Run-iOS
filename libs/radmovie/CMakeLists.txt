@@ -114,8 +114,8 @@ target_link_libraries(radmovie
         radsound
 )
 
-# Agregar OpenAL para Android si se necesita
-if(ANDROID)
+# Agregar OpenAL para Android/iOS si se necesita
+if(ANDROID OR IOS)
     target_link_libraries(radmovie PRIVATE OpenAL)
 	
 endif()
@@ -135,6 +135,14 @@ if(ANDROID AND NOT SRR2_USE_BINK)
         ffmpeg::libavutil.so
         ffmpeg::libswresample.so
         ffmpeg::libswscale.so
+    )
+endif()
+
+# iOS + FFmpeg estatico: incluir headers + enlazar bibliotecas importadas
+if(IOS AND NOT SRR2_USE_BINK)
+    target_include_directories(radmovie PRIVATE ${FFMPEG_INCLUDE_DIR})
+    target_link_libraries(radmovie PRIVATE
+        ${SRR2_FFMPEG_LIBS}
     )
 endif()
 

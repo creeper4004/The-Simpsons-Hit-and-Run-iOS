@@ -198,6 +198,14 @@ void CGuiScreenLanguage::InitIntro()
 //===========================================================================
 void CGuiScreenLanguage::InitRunning()
 {
+#ifdef RAD_IOS
+    // Sideload-only build: auto-select a default language so the language
+    // selection screen completes and the game advances to the front-end.
+    // Without this, the screen waits for a menu selection which never
+    // arrives on iOS (no GUI touch input wired yet).
+    CGuiTextBible::SetCurrentLanguage( SRR2_LANGUAGE[ 0 ] );
+    m_pParent->HandleMessage( GUI_MSG_LANGUAGE_SELECTION_DONE );
+#endif
 }
 
 

@@ -26,6 +26,10 @@
 #include <FeTextBible.h>
 #include <string.h>
 
+#ifdef RAD_IOS
+extern "C" void iOSProgress(const char* stage);
+#endif
+
 //===========================================================================
 // Global Data, Local Data, Local Classes
 //===========================================================================
@@ -50,6 +54,13 @@ FeApp* FeApp::s_Instance = NULL;
 //===========================================================================
 void FeApp::AddProject( Scrooby::Project* project )
 {
+#ifdef RAD_IOS
+    {
+        static char dbuf[ 256 ];
+        snprintf( dbuf, sizeof(dbuf), "fe-add-project prj=%p", (void*)project );
+        iOSProgress( dbuf );
+    }
+#endif
     FeProject* feProject = dynamic_cast<FeProject*>( project );
     if( feProject )
     {
@@ -409,12 +420,39 @@ void FeApp::DrawFrame( float deltaTime )
         {
             if( feProject->IsLoaded() )
             {
+#ifdef RAD_IOS
+                {
+                    static int d = 300;
+                    if( --d <= 0 ) {
+                        d = 300;
+                        static char dbuf[ 512 ];
+                        Scrooby::Screen* cur = project->GetCurrentScreen();
+                        const char* nm = "(null)";
+                        if( cur != NULL )
+                        {
+                            FeScreen* fs = dynamic_cast<FeScreen*>( cur );
+                            nm = fs ? fs->GetName() : "(not-fe)";
+                        }
+                        snprintf( dbuf, sizeof(dbuf), "scrooby-drawframe loaded=1 screen=%p name=%s", cur, nm );
+                        iOSProgress( dbuf );
+                    }
+                }
+#endif
                 m_DrawingFrame = true;        
                 project->GetCurrentScreen()->Display();
                 m_DrawingFrame = false;
             }
             else
             {
+#ifdef RAD_IOS
+                {
+                    static int d = 300;
+                    if( --d <= 0 ) {
+                        d = 300;
+                        iOSProgress( "scrooby-drawframe loaded=0 (async loading)" );
+                    }
+                }
+#endif
                 if( !m_ResourceManager->IsAsyncLoading() )
                 {
                     m_ResourceManager->ContinueLoading();
@@ -761,10 +799,21 @@ void FeApp::RegisterCementFile( const char* filename )
 void FeApp::RemoveProject( Scrooby::Project* project )
 {
     char temp[80];
+    char savedSection[64];
     FeProject* feProject = dynamic_cast<FeProject*>( project );
     strcpy( temp, feProject->GetInventorySection() );
+
+    // RemoveResource() operates in the project's own inventory section, but
+    // SetInventorySection() mutates the resource manager's *global* section.
+    // During the bootup->frontend transition the backend project can still be
+    // loading while this project (bootup) is removed; clobbering the global
+    // section here makes the backend's sub-resources (pages/images) resolve in
+    // the wrong section, so they fall through to a bogus .pag file load and
+    // crash (NULL file loader). Save and restore the section around the removal.
+    strcpy( savedSection, m_ResourceManager->GetInventorySection() );
     m_ResourceManager->SetInventorySection( temp );
     m_ResourceManager->RemoveResource( feProject );
+    m_ResourceManager->SetInventorySection( savedSection );
     m_Projects.Erase( feProject );
     feProject->Release();
 
@@ -813,6 +862,7 @@ void FeApp::SetProject( Scrooby::Project* project )
 {
     rAssert( project != NULL );
 
+    rReleasePrintf( "[FeApp::SetProject] project=%p\n", project );
     FeProject* feProject = dynamic_cast<FeProject*>( project );
     for( unsigned int i = 0; i < static_cast<unsigned int>( m_Projects.Size() ); i++ )
     {

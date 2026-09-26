@@ -14,6 +14,7 @@
 #define ACTORANIMATION_H
 
 #include <radmath/matrix.hpp>
+#include <cstddef> // NULL (necesario en C++11+ en Apple; no siempre llega transitivamente)
 
 //===========================================================================
 // Nested Includes

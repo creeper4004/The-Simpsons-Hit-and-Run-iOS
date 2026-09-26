@@ -8,7 +8,14 @@
 #include <pddi/pdditype.hpp>
 #include <pddi/pddi.hpp>
 #include <math.h>
+#include <stdio.h>
 #include <input/touch/touchcontrolsconfigurationmanager.h>
+#include <input/touch/touchplatformpaths.h>
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
+#include <input/touch/touchassetextractor.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 #if defined(RAD_ANDROID)
 #include <android/log.h>
 
@@ -146,12 +153,57 @@ float TouchHudRenderer::GetPressedOpacity() const
 
 void TouchHudRenderer::Render()
 {
+#if defined(RAD_IOS)
+    // Diag: registrar que gate impide dibujar el HUD.
+    {
+        char dp[ 1024 ] = { 0 };
+        snprintf( dp, sizeof(dp), "%s/srr2_hud.txt", GetTouchWriteBasePath() );
+        FILE* f = fopen( dp, "w" );
+        if ( f != NULL ) {
+            fprintf( f, "mInitialized=%d mEnabled=%d\n", (int)mInitialized, (int)mEnabled );
+            fprintf( f, "assetInit=%d\n", (int)( TouchAssetManager::GetInstance().IsInitialized() ) );
+            fprintf( f, "hudEnabled=%d\n", (int)( TouchHudSystem::GetInstance().IsEnabled() ) );
+            fprintf( f, "shouldShow=%d\n", (int)( TouchInputModeManager::GetInstance().ShouldShowTouchHud() ) );
+            fprintf( f, "profile=%d\n", (int)( TouchHudSystem::GetInstance().GetCurrentProfile() ) );
+            {
+                TouchInputModeManager& m = TouchInputModeManager::GetInstance();
+                fprintf( f, "mode=%d touchHudEnabled=%d gamepad=%d touchMode=%d\n",
+                    (int)m.GetMode(), (int)m.IsTouchHudEnabled(), (int)m.IsGamepadConnected(), (int)m.IsTouchMode() );
+            }
+            // --- puertas de dibujo que no cubre el bloque de arriba ---
+            if ( p3d::pddi != 0 ) {
+                pddiRect sc;
+                p3d::pddi->GetScissor( &sc );
+                fprintf( f, "scissor=%d %d %d %d\n", sc.left, sc.top, sc.right, sc.bottom );
+            } else {
+                fprintf( f, "scissor=(pddi null)\n" );
+            }
+            {
+                TouchAssetManager& am = TouchAssetManager::GetInstance();
+                fprintf( f, "spriteStart=%d spriteSelect=%d\n",
+                    (int)( am.GetSprite( TOUCH_ASSET_FRONTEND_START ) != 0 ),
+                    (int)( am.GetSprite( TOUCH_ASSET_FRONTEND_SELECT ) != 0 ) );
+                fprintf( f, "assetRoot=%s\n", am.GetAssetRoot() );
+                fprintf( f, "assetErr=%s\n", am.GetLastError() );
+            }
+            fprintf( f, "extractErr=%s\n", TouchAssetExtractor::GetInstance().GetLastError() );
+            {
+                char onePng[ 1024 ] = { 0 };
+                snprintf( onePng, sizeof( onePng ), "%s/touch_controls/frontend/start.png", GetTouchWriteBasePath() );
+                int exists = ( access( onePng, F_OK ) == 0 ) ? 1 : 0;
+                fprintf( f, "docsPng=%d path=%s\n", exists, onePng );
+            }
+            fclose( f );
+        }
+    }
+#endif
+
     if ( !mInitialized || !mEnabled )
     {
         return;
     }
 
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     TouchAssetManager& assetManager = TouchAssetManager::GetInstance();
 
     if ( !assetManager.IsInitialized() )
@@ -210,7 +262,7 @@ void TouchHudRenderer::Render()
 
 bool TouchHudRenderer::BeginTouchHud2D()
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     return false;
 #else
     if ( p3d::pddi == 0 )
@@ -244,7 +296,7 @@ bool TouchHudRenderer::BeginTouchHud2D()
 
 void TouchHudRenderer::EndTouchHud2D()
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     if ( p3d::pddi == 0 )
     {
         return;
@@ -265,7 +317,7 @@ void TouchHudRenderer::EndTouchHud2D()
 
 bool TouchHudRenderer::GetRenderDimensions( float& width, float& height ) const
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     width = 0.0f;
     height = 0.0f;
     return false;
@@ -308,7 +360,7 @@ void TouchHudRenderer::RenderSpriteInPixelRect
     float opacity
 )
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     if ( sprite == 0 )
     {
         return;
@@ -381,7 +433,7 @@ void TouchHudRenderer::RenderControlDefinition
     float renderHeight
 )
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     if ( !control.enabled || !control.visibleByDefault )
     {
         return;
@@ -473,7 +525,7 @@ void TouchHudRenderer::RenderMovementJoystick
     float renderHeight
 )
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     if ( currentProfile != TOUCH_PROFILE_CHARACTER )
     {
         return;
@@ -601,7 +653,7 @@ void TouchHudRenderer::RenderMovementJoystick
 
 void TouchHudRenderer::RenderVisibleControls(TouchProfile currentProfile,float renderWidth,float renderHeight)
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     TouchHudSystem& hudSystem = TouchHudSystem::GetInstance();
 
     const unsigned int controlCount = hudSystem.GetControlCount();
@@ -700,7 +752,7 @@ void TouchHudRenderer::ComputeAspectFitRect
 
 void TouchHudRenderer::RenderCinematicSkip()
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     /*
      * Only render this overlay when touch HUD is allowed.
      * If the player is using a physical gamepad, do not draw touch UI.

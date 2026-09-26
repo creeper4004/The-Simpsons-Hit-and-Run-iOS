@@ -606,6 +606,29 @@ void tSprite::Display()
         {
             Shader->GetShader()->SetTexture(PDDI_SP_BASETEX, textures[i]->GetTexture());   
 
+#if defined(RAD_IOS)
+            {
+                static int dbgN = 0;
+                static int lastA[4096];
+                const sprVertex* v0 = &polys[i*4];
+                const sprVertex* v1 = &polys[i*4+2];
+                int iAlpha = v0->c.Alpha();
+                int lastI = (i < 4096) ? lastA[i] : -1;
+                if (dbgN < 2400 && (lastI < 0 || iAlpha - lastI >= 0x10 || (iAlpha >= 0xf0 && lastI < 0xf0)))
+                {
+                    if (i < 4096) lastA[i] = iAlpha;
+                    const sprVertex* v2v = &polys[i*4+1];
+                    const sprVertex* v3v = &polys[i*4+3];
+                    fprintf(stderr, "SPRPROBE poly=%d/%d tex=%p(%dx%d) xy=(%.1f,%.1f)(%.1f,%.1f)(%.1f,%.1f)(%.1f,%.1f) uv=(%.3f,%.3f)(%.3f,%.3f)(%.3f,%.3f)(%.3f,%.3f) c=rgb%02x%02x%02xa%02x\n",
+                            i, nPolys, (void*)textures[i]->GetTexture(), textures[i]->GetTexture()->GetWidth(), textures[i]->GetTexture()->GetHeight(),
+                            v0->v.x, v0->v.y, v2v->v.x, v2v->v.y, v1->v.x, v1->v.y, v3v->v.x, v3v->v.y,
+                            v0->uv0.u, v0->uv0.v, v2v->uv0.u, v2v->uv0.v, v1->uv0.u, v1->uv0.v, v3v->uv0.u, v3v->uv0.v,
+                            v0->c.Red(), v0->c.Green(), v0->c.Blue(), iAlpha);
+                }
+                dbgN++;
+            }
+#endif
+
             pddiPrimStream* stream = p3d::pddi->BeginPrims(Shader->GetShader(), PDDI_PRIM_TRISTRIP, PDDI_V_CT, 4);
             stream->Vertex(&polys[i*4].v, polys[i*4].c, &polys[i*4].uv0);
             stream->Vertex(&polys[(i*4)+1].v, polys[(i*4)+1].c, &polys[(i*4)+1].uv0);

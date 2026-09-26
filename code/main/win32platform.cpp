@@ -17,6 +17,13 @@
 // Standard Lib
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>   // FILE, snprintf (diagnostico iOS)
+
+#if defined(RAD_IOS)
+// bridge (iosdocuments.mm)
+extern "C" void iOSGetScreenPixelSize(int* outW, int* outH);
+extern "C" const char* iOSGetDocumentsDir(void);
+#endif
 // Pure 3D
 #include <p3d/anim/compositedrawable.hpp>
 #include <p3d/anim/expression.hpp>
@@ -381,11 +388,26 @@ bool Win32Platform::InitializeWindow()
 
     int flags = 0;
 #ifndef RAD_VITA
+#if defined(RAD_IOS)
+    // iOS + MGL: no EAGL GL context. SDL_Metal_CreateView() later provides the
+    // CAMetalLayer-backed UIView that the MGL (OpenGL-on-Metal) renderer binds.
+    flags |= SDL_WINDOW_ALLOW_HIGHDPI;
+#else
     flags |= SDL_WINDOW_OPENGL;
+#endif
 #endif
 #ifdef __SWITCH__
     // Support switching between docked and handheld mode
     flags |= SDL_WINDOW_RESIZABLE;
+#endif
+#ifdef RAD_IOS
+    // iOS: el window debe ocupar TODA la pantalla (UIKit). Sin SDL_WINDOW_FULLSCREEN
+    // el uikit driver crea un window de 800x600 centrado → letterboxing.
+    flags |= SDL_WINDOW_FULLSCREEN;
+    // Sin ALLOW_HIGHDPI el uikit GL view crea el drawable a escala 1.0 (puntos),
+    // y el drawable GL queda en 956x440 en vez de los pixeles fisicos 2868x1320.
+    // Con esta flag el view usa nativeScale (3x) → drawable a resolucion real.
+    flags |= SDL_WINDOW_ALLOW_HIGHDPI;
 #endif
 //#ifdef RAD_ANDROID
     // Optional: on Android you typically want fullscreen from the start.
@@ -396,6 +418,21 @@ bool Win32Platform::InitializeWindow()
 
     int w, h;
     TranslateResolution( StartingResolution, w, h );
+
+#ifdef RAD_IOS
+    // En iOS (device/sim) el window debe cubrir la pantalla completa. Crearlo al
+    // tamano fisico de la pantalla (landscape) para que el drawable GL no sea un
+    // window de 800x600 sino todo el display. SDL/uikit luego mapea el framebuffer
+    // al UIScreen completo.
+    {
+        int physW = 0, physH = 0;
+        iOSGetScreenPixelSize( &physW, &physH );
+        if( physW > 0 && physH > 0 ) {
+            w = physW;
+            h = physH;
+        }
+    }
+#endif
 
 #if SDL_MAJOR_VERSION < 3
     mWnd = SDL_CreateWindow( ApplicationName,

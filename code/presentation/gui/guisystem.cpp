@@ -41,6 +41,10 @@
 #include <render/RenderManager/RenderManager.h>
 #include <render/RenderManager/RenderLayer.h>
 
+#ifdef RAD_IOS
+extern "C" void iOSProgress(const char* stage);
+#endif
+
 #include <p3d/view.hpp>
 #include <p3d/unicode.hpp>
 #include <raddebug.hpp>     // Foundation
@@ -817,6 +821,13 @@ void CGuiSystem::HandleMessage
 //===========================================================================
 void CGuiSystem::OnProjectLoadComplete( Scrooby::Project* pProject )
 {
+#ifdef RAD_IOS
+    {
+        static char buf[ 256 ];
+        snprintf( buf, sizeof(buf), "gui-project-load-complete p=%p state=%d", pProject, (int)m_state );
+        iOSProgress( buf );
+    }
+#endif
     //LOGI("GUI: OnProjectLoadComplete entered. pProject=%p state=%d", pProject, (int)m_state);
 MEMTRACK_PUSH_GROUP( "CGUISystem" );
 	rAssert( pProject != NULL );
@@ -1427,6 +1438,9 @@ void CGuiSystem::OnReleaseBootUp()
 void CGuiSystem::OnInitFrontEnd()
 {
     // load frontend Scrooby project (into FE heap)
+#ifdef RAD_IOS
+    iOSProgress( "gui:oninit-frontend feMgr-created=0 state=FRONTEND_LOADING" );
+#endif
     GetLoadingManager()->AddRequest( FILEHANDLER_SCROOBY,
                                      PROJECT_FILE_FRONTEND,
                                      GMA_LEVEL_FE,

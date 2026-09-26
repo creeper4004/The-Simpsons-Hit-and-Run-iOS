@@ -38,6 +38,18 @@ APKs/
 *.pem
 *.p12
 
+# iOS build artifacts (CMake -G Xcode generates a sibling build dir)
+build_ios/
+**/build_ios/
+
+# iOS FFmpeg static libs (built outside the repo via ios-project/build-ffmpeg.sh; do NOT commit)
+ios-project/external/ffmpeg/
+ios-project/external/
+
+# Xcode DerivedData / user data
+xcuserdata/
+*.xcuserstate
+
 # Logs and temporary files
 *.log
 *.tmp
@@ -47,3 +59,15 @@ APKs/
 # OS files
 .DS_Store
 Thumbs.db
+
+# iOS game-asset bundle source (large, user-supplied PC assets)
+game_assets/
+iosbuild/.gitignore
+
+# Local iOS CMake/Xcode build trees
+/build_ios-*/
+/build_ios_*/
+
+# MGL upstream working checkout and its generated build outputs (recreated by iosbuild/build.sh)
+/mgl-ios/src/
+/mgl-ios/work/

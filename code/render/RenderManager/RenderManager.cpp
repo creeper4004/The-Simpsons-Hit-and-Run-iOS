@@ -92,11 +92,12 @@
 
 #if defined(RAD_ANDROID)
 #include <android/log.h>
-#include <input/touch/touchhudrenderer.h>
 #define LOG_TAG "SimpsonsHitAndRun"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-
+#include <input/touch/touchhudrenderer.h>
+#elif defined(RAD_IOS)
+#include <input/touch/touchhudrenderer.h>
 #elif defined(RAD_VITA)
 #include <psp2/kernel/clib.h>
   #define LOGI(...) do { sceClibPrintf(__VA_ARGS__); sceClibPrintf("\n"); } while(0)
@@ -868,7 +869,7 @@ void RenderManager::ContextUpdate( unsigned int iElapsedTime )
         GetGame()->SetTime(time);
     }
 
-    #if defined(RAD_ANDROID)
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
         /*
         Dibujamos aqui porque este rendermanager dibuja por encima de las cinematicas
         Idea feliz quizas desde aqui podamos dibujar y forzar barras negras para las cinematicas, ya que en algunos moviles estaban bug

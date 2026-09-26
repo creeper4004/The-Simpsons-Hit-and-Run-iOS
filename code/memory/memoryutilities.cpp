@@ -13,7 +13,11 @@
 // System Includes
 //========================================
 
+#if defined(__APPLE__)
+#include <stdlib.h> // iOS: no <malloc.h>, malloc/free estan aqui
+#else
 #include <malloc.h>
+#endif
 #include <math.h>
 #include <stdlib.h>
 

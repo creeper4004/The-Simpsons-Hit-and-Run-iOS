@@ -195,6 +195,9 @@ pddiTexture* pglDevice::NewTexture(pddiTextureDesc* desc)
                      desc->GetAlphaDepth(), desc->GetMipMapCount(),desc->GetType(),desc->GetUsage()))
     {
         lastError = tex->GetLastError();
+        SDL_Log("MGL tex: NewTexture FAILED %dx%d bpp=%d alpha=%d mip=%d type=%d usage=%d err=%d",
+                desc->GetSizeX(), desc->GetSizeY(), desc->GetBitDepth(), desc->GetAlphaDepth(),
+                desc->GetMipMapCount(), (int)desc->GetType(), (int)desc->GetUsage(), (int)lastError);
         delete tex;
         return NULL;
     }

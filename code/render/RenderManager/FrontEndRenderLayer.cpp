@@ -23,6 +23,7 @@
 #include <debug/profiler.h>
 #include <presentation/gui/guisystem.h>
 #include <presentation/presentation.h>
+#include <presentation/fmvplayer/fmvplayer.h> // FMVPlayer::IsPlaying() requiere el tipo completo
 #include <gameflow/gameflow.h>
 #include <contexts/contextenum.h>
 #include <contexts/gameplay/gameplaycontext.h>
@@ -31,9 +32,12 @@
 #ifdef RAD_WIN32
 #include <input/inputmanager.h>
 #endif
-#ifdef RAD_ANDROID
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 #include <presentation/fmvplayer/fmvplayer.h>
 #include <input/touch/touchhudrenderer.h>
+#ifdef RAD_IOS
+extern "C" void iOSProgress(const char* stage);
+#endif
 #endif
 
 
@@ -299,6 +303,22 @@ void FrontEndRenderLayer::Render()
 
         HeapMgr()->PushHeap( GMA_TEMP );
 
+#ifdef RAD_IOS
+        {
+            static int renderDiag = 300;
+            if( --renderDiag <= 0 ) {
+                renderDiag = 300;
+                static char dbuf[ 512 ];
+                if ( mpScroobyApp != NULL ) {
+                    snprintf( dbuf, sizeof(dbuf), "fe-render scroobyApp=%p", mpScroobyApp );
+                } else {
+                    snprintf( dbuf, sizeof(dbuf), "fe-render scroobyApp=NULL" );
+                }
+                iOSProgress( dbuf );
+            }
+        }
+#endif
+
         if( !GetCoinManager()->DrawAfterGui() )
             DrawCoinObject();
 
@@ -315,7 +335,7 @@ void FrontEndRenderLayer::Render()
             DrawCoinObject();
         
         
-        #ifdef RAD_ANDROID
+        #if defined(RAD_ANDROID) || defined(RAD_IOS)
         TouchHudRenderer::GetInstance().Render(); // Excelente sitio para renderizar pero hay que vigilar el caso de cinematica
         #endif
         HeapMgr()->PopHeap( GMA_TEMP );

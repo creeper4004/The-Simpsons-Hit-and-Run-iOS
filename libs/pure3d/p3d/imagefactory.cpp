@@ -349,6 +349,14 @@ bool TextureBuilder::BeginImage(int width, int height, int bpp, tImageHandler::B
     // Bail on bad texture creation
     if (texture == NULL) return false;
 
+    if(!texture || !texture->GetTexture())
+    {
+        SDL_Log("MGL BeginImage: bad texture at Lock mip=%d tex=%p pddi=%p err=%d",
+                currentMipLevel, (void*)texture,
+                texture ? (void*)texture->GetTexture() : 0,
+                (int)(p3d::device ? p3d::device->GetLastError() : -1));
+        return false;
+    }
     lockInfo = texture->Lock(currentMipLevel);
 
     scanline = (unsigned char*)lockInfo->bits;

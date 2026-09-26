@@ -134,6 +134,16 @@ CGuiManagerLanguage::Start( CGuiWindow::eGuiWindowID initialWindow )
 
     bool isLanguageSupported = this->CheckLanguage();
 
+#ifdef RAD_IOS
+    // Sideload-only build: skip the language selector entirely. The engine
+    // has no GUI touch input wired yet, and Language::GetHardwareLanguage()
+    // returns an unsupported code on iOS which would push us into the language
+    // screen that never completes (InitRunning's auto-select races the manager
+    // state transition). Treat the language as selected and go straight to
+    // BOOTUP_LOADING.
+    isLanguageSupported = true;
+#endif
+
     if( !isLanguageSupported || CommandLineOptions::Get( CLO_LANG_PROMPT ) )
     {
         #ifdef RAD_ANDROID

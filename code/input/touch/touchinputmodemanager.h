@@ -106,7 +106,13 @@ inline bool TouchInputModeManager::IsGamepadConfirmed() const
 
 inline bool TouchInputModeManager::IsTouchInputBlockedByGamepad() const
 {
+#if defined(RAD_IOS)
+    // iOS sideload is touch-primary; the simulator / SDL may report a
+    // virtual gamepad which must not suppress the touch HUD.
+    return false;
+#else
     return mGamepadConnected;
+#endif
 }
 
 inline void TouchInputModeManager::SetTouchHudEnabled( bool enabled )

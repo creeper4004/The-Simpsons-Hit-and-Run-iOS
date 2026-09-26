@@ -3,14 +3,20 @@
 #include <stdio.h>
 #include <string.h>
 
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
+#include <input/touch/touchplatformpaths.h>
+#endif
+
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 #include <SDL.h>
 #include <SDL_system.h>
 #include <sys/stat.h>
 #include <errno.h>
 #include <unistd.h>
-#include <android/log.h>
+#endif
 
+#if defined(RAD_ANDROID)
+#include <android/log.h>
 #define TOUCH_CONTROLS_CONFIG_LOG_TAG "SimpsonsHitAndRun"
 #define TOUCH_CONTROLS_CONFIG_LOGI(...) __android_log_print(ANDROID_LOG_INFO, TOUCH_CONTROLS_CONFIG_LOG_TAG, __VA_ARGS__)
 #define TOUCH_CONTROLS_CONFIG_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TOUCH_CONTROLS_CONFIG_LOG_TAG, __VA_ARGS__)
@@ -185,7 +191,7 @@ bool TouchControlsConfigurationManager::IsInitialized() const
 
 bool TouchControlsConfigurationManager::Save()
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     return true;
 #else
     if ( !BuildPaths() )
@@ -535,7 +541,7 @@ TouchRect TouchControlsConfigurationManager::GetEffectiveRect
 
 bool TouchControlsConfigurationManager::BuildPaths()
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     strncpy( mConfigRoot, ".", sizeof( mConfigRoot ) );
     mConfigRoot[ sizeof( mConfigRoot ) - 1 ] = '\0';
 
@@ -555,7 +561,7 @@ bool TouchControlsConfigurationManager::BuildPaths()
 
     return true;
 #else
-    const char* storagePath = SDL_AndroidGetExternalStoragePath();
+    const char* storagePath = GetTouchWriteBasePath();
 
     if ( storagePath == 0 || storagePath[ 0 ] == '\0' )
     {
@@ -591,7 +597,7 @@ bool TouchControlsConfigurationManager::BuildPaths()
 
 bool TouchControlsConfigurationManager::EnsureDirectory( const char* path ) const
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     (void)path;
     return true;
 #else
@@ -631,7 +637,7 @@ bool TouchControlsConfigurationManager::EnsureDirectory( const char* path ) cons
 
 bool TouchControlsConfigurationManager::FileExists( const char* path ) const
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     FILE* file = fopen( path, "rb" );
 
     if ( file == 0 )
@@ -769,7 +775,7 @@ bool TouchControlsConfigurationManager::WriteVersionFile() const
 
 bool TouchControlsConfigurationManager::WriteDefaultConfigurationFile() const
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     return true;
 #else
     FILE* file = fopen( mConfigPath, "wb" );

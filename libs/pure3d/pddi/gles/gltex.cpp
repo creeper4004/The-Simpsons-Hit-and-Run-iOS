@@ -18,8 +18,14 @@ static inline GLenum PickPixelFormat(pddiPixelFormat format)
 {
     switch (format)
     {
-    case PDDI_PIXEL_RGB888: return GL_BGRA_EXT;
-    case PDDI_PIXEL_ARGB8888: return GL_BGRA_EXT;
+    // En GLES2 el `internalformat` de glTexImage2D debe ser un formato interno
+    // valido (GL_RGBA/GL_RGB). GL_BGRA_EXT (0x80E1) NO es un internalformat
+    // valido en ES2: solo se acepta como `format` (via GL_EXT_bgra). Usarlo como
+    // internalformat funciona en el simulador (driver laxo) pero da texturas
+    // negras en el dispositivo real (driver estricto). El `format` (BGRA/RGBA)
+    // ya se elige aparte segun lock.native en el glTexImage2D de abajo.
+    case PDDI_PIXEL_RGB888: return GL_RGBA;
+    case PDDI_PIXEL_ARGB8888: return GL_RGBA;
 #ifdef RAD_VITAGL
     case PDDI_PIXEL_DXT1: return GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
     case PDDI_PIXEL_DXT3: return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
@@ -119,6 +125,26 @@ void pglTexture::SetGLState(void)
                 ySize, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                 image);
             delete [] image;
+#if defined(RAD_IOS)
+            {
+                static int sTexProbes = 0;
+                if (sTexProbes < 20) {
+                    const unsigned char* px = (const unsigned char*)bits[0];
+                    unsigned int n = (unsigned int)xSize * (unsigned int)ySize;
+                    if (n > 0) {
+                        unsigned long long r=0,g=0,b=0,a=0; unsigned int cnt=0;
+                        const unsigned char* q = px;
+                        for (unsigned int i=0;i<n && cnt<40000;i++,q+=4,cnt++){ r+=q[0];g+=q[1];b+=q[2];a+=q[3]; }
+                        FILE*_f=fopen("/tmp/shar_tex.txt","a");
+                        if(_f){ fprintf(_f,"TEX %dx%d fmt=%d native=%d type=%d avg(%llu,%llu,%llu,%llu) first=%02x%02x%02x%02x\n",
+                            xSize,ySize,lock.format,lock.native?1:0,type,cnt?r/cnt:0,cnt?g/cnt:0,cnt?b/cnt:0,cnt?a/cnt:0,
+                            px[0],px[1],px[2],px[3]); fclose(_f); }
+                    }
+                    sTexProbes++;
+                }
+            }
+#endif
+
 #endif
         }
 #ifdef RAD_VITAGL
@@ -133,6 +159,25 @@ void pglTexture::SetGLState(void)
             glTexImage2D(GL_TEXTURE_2D, 0, PickPixelFormat(lock.format), xSize,
                 ySize, 0, lock.native ? GL_BGRA_EXT : GL_RGBA, GL_UNSIGNED_BYTE,
                 (GLvoid *)bits[0]);
+#if defined(RAD_IOS)
+            {
+                static int sTexProbes = 0;
+                if (sTexProbes < 20) {
+                    const unsigned char* px = (const unsigned char*)bits[0];
+                    unsigned int n = (unsigned int)xSize * (unsigned int)ySize;
+                    if (n > 0) {
+                        unsigned long long r=0,g=0,b=0,a=0; unsigned int cnt=0;
+                        const unsigned char* q = px;
+                        for (unsigned int i=0;i<n && cnt<40000;i++,q+=4,cnt++){ r+=q[0];g+=q[1];b+=q[2];a+=q[3]; }
+                        FILE*_f=fopen("/tmp/shar_tex.txt","a");
+                        if(_f){ fprintf(_f,"TEX %dx%d fmt=%d native=%d type=%d avg(%llu,%llu,%llu,%llu) first=%02x%02x%02x%02x\n",
+                            xSize,ySize,lock.format,lock.native?1:0,type,cnt?r/cnt:0,cnt?g/cnt:0,cnt?b/cnt:0,cnt?a/cnt:0,
+                            px[0],px[1],px[2],px[3]); fclose(_f); }
+                    }
+                    sTexProbes++;
+                }
+            }
+#endif
         }
         /*
         else

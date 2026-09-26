@@ -123,9 +123,11 @@ set(SRR2_SOURCES
 	"input/touch/touchactionregistry.cpp"
 	"input/touch/touchinputmodemanager.cpp"
 	"input/touch/touchinputadapter.cpp"
+	"input/touch/touchplatformpaths.cpp"
 	"input/touch/touchcontextresolver.cpp"
 	"input/touch/touchhudsystem.cpp"
 	"input/touch/touchassetextractor.cpp"
+	"input/touch/gameassetextractor.cpp"
 	"input/touch/touchassetmanager.cpp"
 	"input/touch/touchhudrenderer.cpp"
 	"input/touch/touchcameracontroller.cpp"
@@ -553,6 +555,10 @@ endif()
 if(ANDROID)
     add_library(main SHARED ${SRR2_SOURCES})
     set(SRR2_TARGET main)
+elseif(IOS)
+    # iOS: el motor se compila como biblioteca estatica; el binario final lo produce la app shell (ios-project)
+    add_library(main STATIC ${SRR2_SOURCES})
+    set(SRR2_TARGET main)
 else()
     add_executable(${PROJECT_NAME} ${SRR2_SOURCES})
     set(SRR2_TARGET ${PROJECT_NAME})
@@ -584,6 +590,21 @@ if(ANDROID)
 		android
 		EGL
 		GLESv2
+	)
+endif()
+
+# --- iOS: OpenAL + frameworks del sistema ---
+if(IOS)
+	target_link_libraries(${SRR2_TARGET}
+		OpenAL
+		${OPENGLES_FRAMEWORK}
+		${UIKit_FRAMEWORK}
+		${CoreAudio_FRAMEWORK}
+		${AudioToolbox_FRAMEWORK}
+		${CoreFoundation_FRAMEWORK}
+		${QuartzCore_FRAMEWORK}
+		${Metal_FRAMEWORK}
+		${Foundation_FRAMEWORK}
 	)
 endif()
 
@@ -627,6 +648,11 @@ else()
             ffmpeg::libswresample.so
             ffmpeg::libswscale.so
         )
+    elseif(IOS)
+        target_include_directories(${SRR2_TARGET} PRIVATE ${FFMPEG_INCLUDE_DIR})
+        target_link_libraries(${SRR2_TARGET}
+            ${SRR2_FFMPEG_LIBS}
+        )
     else()
         target_link_libraries(${SRR2_TARGET} PkgConfig::FFmpeg)
     endif()
@@ -636,4 +662,127 @@ endif()
 option(SRR2_USE_PCH ON)
 if (SRR2_USE_PCH)
 	target_precompile_headers(${SRR2_TARGET} PRIVATE "main/pchsrr2.h")
+endif()
+
+
+# ============================================================================
+# iOS app shell: enlaza el motor (libmain.a) + SDL2 main + frameworks en un .app
+
+#
+# main() real vive en libmain.a (win32main.cpp via macro SDL_main). SDL2 uikit
+# (SDL2main) provee el bootstrap UIKit que llama a SDL_main. La app NO define
+# su propio main — solo enlaza. Añadimos un .cpp minimo para que CMake/Xcode
+# creen el target.
+# ============================================================================
+if(IOS)
+	add_executable(SimpsonsIOS
+		"main/iosshell.cpp"
+		"main/iosdocuments.mm"  # bridge ObjC++: devuelve el directorio Documents/ (NSDocumentDirectory)
+	)
+	set_target_properties(SimpsonsIOS PROPERTIES
+		OUTPUT_NAME "Simpsons"
+		MACOSX_BUNDLE TRUE
+		MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/ios-project/Simpsons-Info.plist"
+		MACOSX_BUNDLE_BUNDLE_NAME "Simpsons Hit & Run"
+		XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+		XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "15.0"
+	)
+	# Firmar para dispositivo real (iphoneos). El simulador no necesita firma.
+	# Pasar -DSRR2_SIGN=ON al configurar para habilitar (auto-signing con la
+	# identidad Apple Development + DEVELOPMENT_TEAM del usuario).
+	if(SRR2_SIGN)
+		set_target_properties(SimpsonsIOS PROPERTIES
+			XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "YES"
+			XCODE_ATTRIBUTE_CODE_SIGN_STYLE "Automatic"
+			XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "L82Y9H9ZXA"
+			XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.c4rlox.simpsons.ios"
+		)
+	else()
+		set_target_properties(SimpsonsIOS PROPERTIES
+			XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
+		)
+	endif()
+
+	# Bundle los PNG de los controles tactiles como recurso en el bundle.
+	# En Android viven en assets/ del APK; en iOS se copian a Resources/ del .app
+	# para que el TouchAssetExtractor los copie a Documents/touch_controls.
+	add_custom_command(TARGET SimpsonsIOS POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory
+			"${CMAKE_SOURCE_DIR}/android-project/app/src/main/assets/touch_controls"
+			"$<TARGET_BUNDLE_DIR:SimpsonsIOS>/touch_controls"
+		COMMENT "Bundling touch_controls assets into simpsons.app/touch_controls/"
+	)
+	# Bundle los assets del juego (art/, movies/, scripts/, sound/, *.rcf,
+	# simpsons.ini) dentro del .app. El GameAssetExtractor los copia a
+	# Documents/ en el primer arranque, porque el motor lee todo relativo al
+	# CWD y el bundle (Resources/) es solo lectura.
+	if(EXISTS "${CMAKE_SOURCE_DIR}/game_assets")
+		add_custom_command(TARGET SimpsonsIOS POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_directory
+				"${CMAKE_SOURCE_DIR}/game_assets"
+				"$<TARGET_BUNDLE_DIR:SimpsonsIOS>/game_assets"
+			COMMENT "Bundling game assets into simpsons.app/game_assets/"
+		)
+	else()
+		message(WARNING "game_assets/ not found; the app will have no game assets bundled.")
+	endif()
+	target_link_libraries(SimpsonsIOS
+		main
+		SDL2::SDL2main
+		${SDL_LIBRARY}
+		choreo
+		p3d
+		pddi
+		poser
+		radcore
+		radcontent
+		radmath
+		radmovie
+		radmusic
+		radsound
+		radscript
+		scrooby
+		sim
+		Threads::Threads
+		OpenAL
+		${OPENGLES_FRAMEWORK}
+		${UIKit_FRAMEWORK}
+		${CoreAudio_FRAMEWORK}
+		${AudioToolbox_FRAMEWORK}
+		${CoreFoundation_FRAMEWORK}
+		${QuartzCore_FRAMEWORK}
+		${Metal_FRAMEWORK}
+		${Foundation_FRAMEWORK}
+		"-framework VideoToolbox"
+		"-framework CoreVideo"
+		"-framework CoreMedia"
+	)
+	target_include_directories(SimpsonsIOS PRIVATE ${FFMPEG_INCLUDE_DIR})
+	target_link_libraries(SimpsonsIOS ${SRR2_FFMPEG_LIBS})
+	# libiconv (subtitulos FFmpeg) y libz/bz2/lzma: dependencias de enlace de FFmpeg en iOS
+	target_link_libraries(SimpsonsIOS iconv z bz2 lzma)
+
+	# MGL (OpenGL-on-Metal): sustituye a EAGL/OpenGLES como implementacion GL en
+	# iOS 26/27. libmgl exporta los simbolos gl*; glslang+SPIRV-Tools+SPIRV-Cross
+	# estan estaticos dentro de libmgl (GLSL->SPIRV->MSL en runtime).
+	# Pasar -DIOS_MGL_LIB_DIR=<dir> (debe contener los 5 .a).
+	set(IOS_MGL_LIB_DIR "" CACHE PATH "Directory with MGL static libs (libmgl/libglslang/libSPIRV/libSPIRV-Tools/libglslang-default-resource-limits)")
+	if(IOS_MGL_LIB_DIR)
+		# dlsym-only consumers: keep every MGL export even when no code
+		# references it statically (dead_strip would otherwise remove it).
+		set_target_properties(SimpsonsIOS PROPERTIES
+			XCODE_ATTRIBUTE_DEAD_CODE_STRIPPING NO)
+		# -force_load: nothing references the gl_core.c gl* wrapper layer
+		# directly (the engine dlsym's it), so without forcing the archive
+		# the linker dead-strips those symbols and gl* resolves to the
+		# simulator's OpenGLES stub instead of MGL.
+		target_link_libraries(SimpsonsIOS
+			-Wl,-force_load,${IOS_MGL_LIB_DIR}/libmgl.a
+			-Wl,-u,_glGetIntegerv
+			${IOS_MGL_LIB_DIR}/libglslang.a
+			${IOS_MGL_LIB_DIR}/libSPIRV.a
+			${IOS_MGL_LIB_DIR}/libSPIRV-Tools.a
+			${IOS_MGL_LIB_DIR}/libglslang-default-resource-limits.a
+		)
+	endif()
 endif()

@@ -36,6 +36,11 @@
 
 - (void)hideLaunchScreen;
 
+/* Scene lifecycle support (required by the iOS 18+/Xcode 26+ SDK):
+ * SDLUIKitSceneDelegate bridges UIKit scenes to the legacy window/event flow. */
+- (UIWindow *)sceneWindow;
+- (void)setSceneWindow:(UIWindow *)window;
+
 /* This property is marked as optional, and is only intended to be used when
  * the app's UI is storyboard-based. SDL is not storyboard-based, however
  * several major third-party ad APIs (e.g. Google admob) incorrectly assume this

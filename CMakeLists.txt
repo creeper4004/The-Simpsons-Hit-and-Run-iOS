@@ -22,6 +22,10 @@ if(ANDROID)
 	set(SRR2_P3D_PDDI "GLES2" CACHE STRING "Pure3D PDDI implementation")
 	#set(SRR2_USE_BINK ON CACHE BOOL "Use RAD Game Tools Bink SDK instead of FFmpeg" FORCE)
 	message(STATUS "Android detected - PDDI set to GLES2")
+elseif(IOS)
+	# iOS solo expone OpenGL ES 2.0 (via la capa SDL uikit). No hay OpenGL desktop ni EGL nativo.
+	set(SRR2_P3D_PDDI "GLES2" CACHE STRING "Pure3D PDDI implementation")
+	message(STATUS "iOS detected - PDDI set to GLES2")
 elseif(VITA)
 	set(SRR2_P3D_PDDI "GXM" CACHE STRING "Pure3D PDDI implementation")
 	message(STATUS "Vita detected - PDDI set to GXM")
@@ -61,6 +65,14 @@ if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "Android")
 	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -llog -landroid -lEGL -lGLESv2")
 endif()
 
+# iOS (define BEFORE add_subdirectory so libs/code see it)
+if(IOS)
+	add_definitions(-DRAD_IOS)
+	# iOS es puramente estatico (no hay .so); GLES2 se enlaza via frameworks del SDK.
+	set(CMAKE_OSX_SYSROOT iphoneos)
+	message(STATUS "iOS detected - RAD_IOS defined")
+endif()
+
 find_program(CCACHE_FOUND ccache)
 if(CCACHE_FOUND)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
@@ -68,9 +80,9 @@ endif()
 
 
 # SDL - Configuración por plataforma
-if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "Android")
-    # Android: compilar SDL2 desde libs/SDL2
-    message(STATUS "Android detected - Compilando SDL2 desde libs/SDL2")
+if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "Android" OR IOS)
+    # Android/iOS: compilar SDL2 desde libs/SDL2 (el arbol vendido ya soporta uikit)
+    message(STATUS "Mobile detected - Compilando SDL2 desde libs/SDL2")
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/libs/SDL2/CMakeLists.txt")
         add_subdirectory(libs/SDL2 SDL2_Build EXCLUDE_FROM_ALL)
         set(SDL_LIBRARY SDL2::SDL2)
@@ -99,12 +111,21 @@ endif()
 
 
 # PNG / libpng
-if(ANDROID)
+if(ANDROID OR IOS)
     # Compilar libpng desde tu carpeta
     add_subdirectory(libs/libpng EXCLUDE_FROM_ALL)
 	
+    # iOS no trae OpenAL del sistema; compilamos openal-soft como STATIC (CoreAudio backend).
+    # Sin esto, el target OpenAL se crea como SHARED y el link/signing de iOS falla.
+    if(IOS)
+        set(LIBTYPE STATIC CACHE STRING "OpenAL build type (STATIC for iOS)" FORCE)
+        set(ALSOFT_INSTALL OFF CACHE BOOL "" FORCE)
+        set(ALSOFT_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(ALSOFT_UTILS OFF CACHE BOOL "" FORCE)
+        set(ALSOFT_TESTS OFF CACHE BOOL "" FORCE)
+    endif()
 	add_subdirectory(libs/openal-soft EXCLUDE_FROM_ALL)
-    # zlib viene en Android (NDK)
+    # zlib viene en Android (NDK); en iOS la trae el SDK (libz)
     find_library(ZLIB_LIB z)
 
     # Variables "compat" por si tus cmakes antiguos usan estas
@@ -118,7 +139,7 @@ endif()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-if(NOT ANDROID)
+if(NOT ANDROID AND NOT IOS)
   find_package(OpenAL REQUIRED)
 endif()
 
@@ -164,7 +185,7 @@ endif()
 if(SRR2_USE_BINK)
 	add_definitions(-DRAD_MOVIEPLAYER_USE_BINK)
 else()
-	if(NOT ANDROID)
+	if(NOT ANDROID AND NOT IOS)
 		find_package(PkgConfig REQUIRED)
 		pkg_check_modules(FFmpeg REQUIRED IMPORTED_TARGET
 				libavformat
@@ -173,6 +194,32 @@ else()
 				libswresample
 				libswscale
 		)
+	elseif(IOS)
+		# iOS: FFmpeg 6.0 enlazado estaticamente (compilado aparte con el SDK del simulator/device).
+		# Localizamos las bibliotecas construidas para iOS. Sobreescribible con -DSRR2_IOS_FFMPEG_DIR=...
+		# El default apunta a donde ios-project/build-ffmpeg.sh deja los .a (fuera del repo, no se commitean).
+		set(SRR2_IOS_FFMPEG_DIR "$ENV{HOME}/src/srr2_ios_builds/ffmpeg_out_sim" CACHE PATH "iOS FFmpeg static build (lib/, include/)")
+		# Firmar la app para dispositivo real (iphoneos). OFF por defecto (simulador).
+		set(SRR2_SIGN OFF CACHE BOOL "Sign the iOS app (release/device builds)")
+		if(NOT EXISTS "${SRR2_IOS_FFMPEG_DIR}/lib/libavcodec.a")
+			message(WARNING "iOS FFmpeg static libs not found in ${SRR2_IOS_FFMPEG_DIR}/lib (missing libavcodec.a). Movie playback will fail to link.")
+		endif()
+
+		# Creamos targets IMPORTED para cada biblioteca para enlazarlas como tal.
+		foreach(lib avcodec avformat avutil swresample swscale)
+			add_library(SRR2_FFMPEG_${lib} STATIC IMPORTED GLOBAL)
+			set_target_properties(SRR2_FFMPEG_${lib} PROPERTIES
+				IMPORTED_LOCATION "${SRR2_IOS_FFMPEG_DIR}/lib/lib${lib}.a"
+			)
+		endforeach()
+		set(SRR2_FFMPEG_LIBS
+			SRR2_FFMPEG_avcodec
+			SRR2_FFMPEG_avformat
+			SRR2_FFMPEG_avutil
+			SRR2_FFMPEG_swresample
+			SRR2_FFMPEG_swscale
+		)
+		set(FFMPEG_INCLUDE_DIR "${SRR2_IOS_FFMPEG_DIR}/include")
 	else()
 		# ✅ ANDROID: obtener FFmpeg desde Prefab (AAR com.fpliu...:ffmpeg)
     # Prefab expone un paquete CMake. Normalmente se encuentra con find_package().
@@ -213,6 +260,18 @@ endif()
 
 if(WIN32)
 	add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+endif()
+
+# iOS: frameworks del sistema que el engine usa (GLES2, audio CoreAudio, UIKit para la app shell)
+if(IOS)
+	find_library(OPENGLES_FRAMEWORK OpenGLES)
+	find_library(UIKit_FRAMEWORK UIKit)
+	find_library(CoreAudio_FRAMEWORK CoreAudio)
+	find_library(AudioToolbox_FRAMEWORK AudioToolbox)
+	find_library(CoreFoundation_FRAMEWORK CoreFoundation)
+	find_library(QuartzCore_FRAMEWORK QuartzCore)
+	find_library(Metal_FRAMEWORK Metal)
+	find_library(Foundation_FRAMEWORK Foundation)
 endif()
 
 add_subdirectory(libs)

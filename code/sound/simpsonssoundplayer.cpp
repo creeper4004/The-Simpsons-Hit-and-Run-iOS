@@ -283,6 +283,20 @@ bool SimpsonsSoundPlayer::QueueSound( IDaSoundResource* resource,
     s_playerManager->CaptureFreePlayer( &m_playa, 
                                         resource,
                                         Type_Positional == m_Type );
+    if( m_playa == NULL )
+    {
+        // No free player slot (sound system Initialize never ran). Roll back
+        // the in-use counters instead of dereferencing NULL below.
+        if( resource->GetType() == IDaSoundResource::CLIP )
+        {
+            --s_clipPlayersInUse;
+        }
+        else
+        {
+            --s_streamPlayersInUse;
+        }
+        return( false );
+    }
     rAssert( m_playa != NULL );
 
     //

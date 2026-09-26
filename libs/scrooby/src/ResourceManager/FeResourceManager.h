@@ -26,6 +26,10 @@
 #include "ResourceManager.h"
 #include "utility/rVector.hpp"
 #include "Enums.h"
+
+#ifdef RAD_IOS
+extern "C" void iOSProgress(const char* stage);
+#endif
 #include <p3d/loadmanager.hpp>
 #include <p3d/imagefactory.hpp>
 #include <string.h>
@@ -348,6 +352,14 @@ protected:
         void Release() { radLoadObject::Release(); }
         void Done( tLoadStatus status, tLoadRequest *load )
         {
+#ifdef RAD_IOS
+            {
+                static char dbuf[ 256 ];
+                snprintf( dbuf, sizeof(dbuf), "p3d-callback-done status=%d load=%p",
+                    (int)status, load );
+                iOSProgress( dbuf );
+            }
+#endif
             bool isDummyLoad = load != NULL ? load->IsDummy() : false;
 
             // continue loading, or are we all done??

@@ -26,8 +26,8 @@ add_library(png_static STATIC ${PNG_SOURCES})
 # Los headers están en esta misma carpeta (png.h, pngconf.h, etc.)
 target_include_directories(png_static PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 
-# zlib (NDK) en Android: link con -lz
-if(ANDROID)
+# zlib (NDK) en Android / zlib (SDK) en iOS: link con -lz
+if(ANDROID OR IOS)
     find_library(ZLIB_LIB z)
     target_link_libraries(png_static PUBLIC ${ZLIB_LIB})
 

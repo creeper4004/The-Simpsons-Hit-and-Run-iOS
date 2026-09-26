@@ -102,7 +102,11 @@
  * on non-Mac platforms.
  */
 #ifndef MACOS
-#if (defined(__MWERKS__) && defined(macintosh)) || defined(applec) || \
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+/* iOS: Apple defines TARGET_OS_MAC but it's non-zero only on macOS. On iOS we
+ * must NOT define MACOS, because that pulls in <fp.h> (MacOS9/CodeWarrior
+ * header) which does not exist on the iOS SDK. */
+#elif (defined(__MWERKS__) && defined(macintosh)) || defined(applec) || \
     defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)
 #define MACOS
 #endif

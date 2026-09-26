@@ -21,8 +21,9 @@ set(RADSOUND_SOURCES
 	"src/radsound/streamplayer.cpp"
 )
 
-# Backend Win32 SOLO en Windows desktop
-if(WIN32 OR ANDROID)
+# Backend Win32 SOLO en Windows desktop / Android / iOS
+# (el backend "win32" de radsound es el unico HAL existente y habla directamente con OpenAL)
+if(WIN32 OR ANDROID OR IOS)
 	list(APPEND RADSOUND_SOURCES
 		"src/hal/win32/buffer.cpp"
 		"src/hal/win32/bufferloader.cpp"
@@ -44,19 +45,22 @@ target_include_directories(radsound
 )
 
 # radcore siempre
-target_link_libraries(radsound PUBLIC radcore)
+# (los includes de OpenAL van via target_include_directories abajo, no via ${OPENAL_INCLUDE_DIR})
+target_link_libraries(radsound
+	PUBLIC radcore
+)
 
-# OpenAL: en Android linkea contra openal-soft (target OpenAL) o contra find_package(OpenAL)
-if(ANDROID)
+# OpenAL: en Android/iOS linkea contra openal-soft (target OpenAL) o contra find_package(OpenAL)
+if(ANDROID OR IOS)
 	# si añadiste openal-soft con add_subdirectory, normalmente el target es "OpenAL"
 	target_link_libraries(radsound PUBLIC OpenAL)
-else()
+elseif(WIN32)
 	target_include_directories(radsound PRIVATE ${OPENAL_INCLUDE_DIR})
 	target_link_libraries(radsound PUBLIC ${OPENAL_LIBRARY})
 endif()
 
 
-if(SRR2_BUILD_TESTS AND NOT ANDROID)
+if(SRR2_BUILD_TESTS AND NOT ANDROID AND NOT IOS)
 
 	add_executable(simplesound "sample/simplesound/src/main.cpp")
 	target_link_libraries(simplesound
@@ -70,25 +74,5 @@ if(SRR2_BUILD_TESTS AND NOT ANDROID)
 	if(VITA)
 		vita_create_self(simplesound.self simplesound)
 	endif()
-endif()
-
-
-
-
-
-
-#  OpenAL fuera de Android (en Android no se usa por ahora)
-if(NOT ANDROID)
-	target_include_directories(radsound PRIVATE ${OPENAL_INCLUDE_DIR})
-	target_link_libraries(radsound
-	radcore
-)
-endif()
-
-target_link_libraries(radsound PUBLIC radcore)
-
-#  OpenAL fuera de Android (en Android no se linkea por ahora)
-if(NOT ANDROID)
-	target_link_libraries(radsound ${OPENAL_LIBRARY})
 endif()
 

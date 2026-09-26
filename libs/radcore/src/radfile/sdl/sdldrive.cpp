@@ -284,10 +284,13 @@ radSdlDrive::radSdlDrive(const char* pdrivespec, radMemoryAllocator alloc)
     radGetDefaultDrive(m_DriveName);
 
     // ============================================================
-    // CAMBIO AQUÍ: En Android IGNORAMOS pdrivespec para que NO pise
-    // el root (a ti te llega "/" y te rompe m_DrivePath).
+    // CAMBIO AQUÍ: En Android/iOS IGNORAMOS pdrivespec para que NO
+    // pise el root (a ti te llega "/" y te rompe m_DrivePath).
+    // En iOS los paths del juego usan drive letters (D:), pero el
+    // autocierre de la drive y su directorio se resuelven con la
+    // única drive montada (la "default" = CWD/Documents).
     // ============================================================
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     (void)pdrivespec; // CAMBIO AQUÍ
 #else
     // Si te pasan drive spec (ej: "D:"), lo respetas
@@ -326,6 +329,19 @@ radSdlDrive::radSdlDrive(const char* pdrivespec, radMemoryAllocator alloc)
         strncpy(m_DrivePath, "/storage/emulated/0/Android/data/com.c4rlox.simpsons/files/", radFileFilenameMax);
         m_DrivePath[radFileFilenameMax] = '\0';
     }
+
+#elif defined(RAD_IOS)
+
+    // En iOS usamos el directorio de trabajo (Documents/, ya ajustado en
+    // win32main.cpp) como raíz del juego. El jugador coloca los assets ahí.
+    #if SDL_MAJOR_VERSION < 3
+    getcwd( m_DrivePath, radFileFilenameMax );
+    #else
+    char* cwd = SDL_GetCurrentDirectory();
+    strncpy( m_DrivePath, cwd, radFileFilenameMax );
+    SDL_free( cwd );
+    #endif
+    m_DrivePath[ radFileFilenameMax ] = '\0';
 
 #else
     // Si no te han puesto drive path, defines el root por plataforma

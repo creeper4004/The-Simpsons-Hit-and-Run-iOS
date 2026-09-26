@@ -235,12 +235,12 @@ daSoundPlayerManager::~daSoundPlayerManager( )
 
     for( unsigned int c = 0; c < SOUND_NUM_CLIP_PLAYERS; c ++ )
     {
-        gClipPlayerArray[ c ]->Release( );
+        if( gClipPlayerArray[ c ] != NULL ) gClipPlayerArray[ c ]->Release( );
     }
     
     for( unsigned int s = 0; s < SOUND_NUM_STREAM_PLAYERS; s ++ )
     {
-        gStreamPlayerArray[ s ]->Release( );
+        if( gStreamPlayerArray[ s ] != NULL ) gStreamPlayerArray[ s ]->Release( );
     } 
 }
 
@@ -443,6 +443,13 @@ bool daSoundPlayerManager::FindFreePlayer(
     
     for( unsigned int c = 0; c < numPlayers; c ++ )
     {
+        // Player slots are only allocated once daSoundRenderingManager's load
+        // callback runs Initialize(); if that never fired (audio init stalled),
+        // slots are NULL and dereferencing them crashes every QueueSound.
+        if ( ppPlayerArray[ c ] == NULL )
+        {
+            continue;
+        }
         if ( false == ppPlayerArray[ c ]->IsCaptured( ) )
         {
             *ppPlayer = ppPlayerArray[ c ];

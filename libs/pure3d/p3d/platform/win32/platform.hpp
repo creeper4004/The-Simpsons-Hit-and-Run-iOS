@@ -10,7 +10,12 @@
 #include <p3d/platform/win32/plat_types.hpp>
 #include <pddi/pddi.hpp>
 
+#if defined(__APPLE__)
+// iOS no tiene <malloc.h>; las declaraciones de malloc/free/realloc estan en <stdlib.h>
+#include <stdlib.h>
+#else
 #include <malloc.h>
+#endif
 
 static const int P3D_MAX_CONTEXTS = 4;
 

@@ -7,8 +7,18 @@
 #include <p3d/image.hpp>
 #include <p3d/sprite.hpp>
 #include <p3d/file.hpp>
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
+#include <input/touch/touchplatformpaths.h>
+#endif
+
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 #include <SDL.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <unistd.h>
+#endif
+
+#if defined(RAD_ANDROID)
 #include <SDL_system.h>
 #include <android/log.h>
 
@@ -58,7 +68,7 @@ TouchAssetManager::~TouchAssetManager()
 
 bool TouchAssetManager::LoadAllSprites()
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     return true;
 #else
    bool allLoaded = true;
@@ -254,7 +264,7 @@ allLoaded = LoadSpriteForAsset(
 
 bool TouchAssetManager::LoadSpriteForAsset(TouchAssetId assetId,const char* relativePath,const char* spriteName)
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     (void)assetId;
     (void)relativePath;
     (void)spriteName;
@@ -297,7 +307,7 @@ bool TouchAssetManager::LoadSpriteForAsset(TouchAssetId assetId,const char* rela
 
 bool TouchAssetManager::Initialize()
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     mInitialized = true;
     return true;
 #else
@@ -645,14 +655,14 @@ tSprite* TouchAssetManager::GetSpriteForControl( TouchHudControlId controlId ) c
 
 bool TouchAssetManager::BuildAssetRoot()
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     return true;
 #else
-    const char* storagePath = SDL_AndroidGetExternalStoragePath();
+    const char* storagePath = GetTouchWriteBasePath();
 
     if ( storagePath == 0 || storagePath[ 0 ] == '\0' )
     {
-        SetLastError( "SDL_AndroidGetExternalStoragePath returned null/empty." );
+        SetLastError( "GetTouchWriteBasePath returned null/empty." );
         return false;
     }
 
@@ -673,7 +683,7 @@ tSprite* TouchAssetManager::LoadSpriteFromFile
     const char* spriteName
 )
 {
-#if !defined(RAD_ANDROID)
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     (void)relativePath;
     (void)spriteName;
     return 0;

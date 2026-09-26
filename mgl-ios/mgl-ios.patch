@@ -1,0 +1,522 @@
+diff --git a/MGL/include/MGLRenderer.h b/MGL/include/MGLRenderer.h
+index 8627adb..04ac7f6 100644
+--- a/MGL/include/MGLRenderer.h
++++ b/MGL/include/MGLRenderer.h
+@@ -23,7 +23,11 @@
+ 
+ #ifdef __OBJC__
+ 
++#if TARGET_OS_IPHONE
++#import <UIKit/UIKit.h>
++#else
+ #import <Appkit/Appkit.h>
++#endif
+ 
+ #ifndef __GLM_CONTEXT_
+ #define __GLM_CONTEXT_
+@@ -35,9 +39,11 @@ typedef struct GLMContextRec_t *GLMContext;
+ 
+ }
+ 
+-- (id) initMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (NSWindow *)window;
+-- (id) createMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (NSWindow *)window;
+-- (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *) view;
++- (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (void *) view;
++#if !TARGET_OS_IPHONE
++- (id) initMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (void *)window;
++- (id) createMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (void *)window;
++#endif
+ 
+ @end
+ 
+@@ -61,6 +67,7 @@ extern "C" {
+ #endif
+ void* CppCreateMGLRendererFromContextAndBindToWindow (void *glm_ctx, void *window);
+ void* CppCreateMGLRendererHeadless (void *glm_ctx);
++void* CppCreateMGLRendererAndBindToUIView (void *glm_ctx, void *uiview, float contentsScale);
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/MGL/src/MGLRenderer.m b/MGL/src/MGLRenderer.m
+index 31cb54e..371bcad 100755
+--- a/MGL/src/MGLRenderer.m
++++ b/MGL/src/MGLRenderer.m
+@@ -93,7 +93,12 @@ static inline id<NSObject> SafeMetalBridge(void *ptr, Class expectedClass, const
+ // Main class performing the rendering
+ @implementation MGLRenderer
+ {
++#if TARGET_OS_IPHONE
++    UIView *_view;
++    float _layerContentsScale;
++#else
+     NSView *_view;
++#endif
+ 
+     CAMetalLayer *_layer;
+     id<CAMetalDrawable> _drawable;
+@@ -336,7 +341,11 @@ void logDirtyBits(GLMContext ctx)
+ {
+     MTLResourceOptions options;
+ 
++#if TARGET_OS_IPHONE
++    options = MTLResourceCPUCacheModeDefaultCache | MTLResourceStorageModeShared;
++#else
+     options = MTLResourceCPUCacheModeDefaultCache | MTLResourceStorageModeManaged;
++#endif
+ 
+     // ways we will only write to this
+     if ((ptr->storage_flags & GL_MAP_READ_BIT) == 0)
+@@ -430,7 +439,6 @@ void logDirtyBits(GLMContext ctx)
+     
+     // init mapped buffer count
+     buffer_map->count = 0;
+-
+     // bind uniforms, shader storage and atomics to buffer map
+     for(int type=0; type<4; type++)
+     {
+@@ -497,10 +505,13 @@ void logDirtyBits(GLMContext ctx)
+ 
+         // vao buffers start after the uniforms and shader buffers
+         vao_buffer_start = buffer_map->count;
+-        // CRITICAL SECURITY FIX: Check array bounds instead of using assert()
+-        if (buffer_map->count >= ctx->state.max_vertex_attribs) {
+-            NSLog(@"MGL SECURITY ERROR: buffer_map count %d exceeds max_vertex_attribs %d",
+-                  buffer_map->count, ctx->state.max_vertex_attribs);
++        // Array capacity is MAX_MAPPED_BUFFERS (32); Metal allows 31 vertex
++        // buffers per stage. max_vertex_attribs (16) is NOT the array bound —
++        // uniform/constant buffers share the same map and routinely push the
++        // count past 16 (13 constants + 4 attribs in this engine).
++        if (buffer_map->count >= MAX_MAPPED_BUFFERS - 1) {
++            NSLog(@"MGL SECURITY ERROR: buffer_map count %d exceeds MAX_MAPPED_BUFFERS %d",
++                  buffer_map->count, MAX_MAPPED_BUFFERS);
+             return false;
+         }
+         buffer_map->buffers[vao_buffer_start].buf = NULL;
+@@ -532,7 +543,7 @@ void logDirtyBits(GLMContext ctx)
+                 if (map_buffer == NULL)
+                 {
+                     // map the buffer object to a metal vertex index
+-                    assert(buffer_map->count < ctx->state.max_vertex_attribs);
++                    assert(buffer_map->count < MAX_MAPPED_BUFFERS - 1);
+                     buffer_map->buffers[vao_buffer_start].attribute_mask |= (0x1 << att);
+                     buffer_map->buffers[vao_buffer_start].buf = gl_buffer;
+                     buffer_map->count++;
+@@ -564,7 +575,7 @@ void logDirtyBits(GLMContext ctx)
+                     if (found_buffer == false)
+                     {
+                         // map the next buffer object to a metal vertex index
+-                        assert(buffer_map->count < ctx->state.max_vertex_attribs);
++                        assert(buffer_map->count < MAX_MAPPED_BUFFERS - 1);
+                         buffer_map->buffers[buffer_map->count].attribute_mask = (0x1 << att);
+                         buffer_map->buffers[buffer_map->count].buf = gl_buffer;
+                         buffer_map->count++;
+@@ -645,13 +656,17 @@ void logDirtyBits(GLMContext ctx)
+         // contents in check for EVERY drawing operation
+         if (ptr->access & GL_MAP_COHERENT_BIT)
+         {
++#if !TARGET_OS_IPHONE
+             [buffer didModifyRange: NSMakeRange(ptr->mapped_offset, ptr->mapped_length)];
++#endif
+ 
+             ptr->data.dirty_bits = DIRTY_BUFFER_DATA;
+         }
+         else
+         {
++#if !TARGET_OS_IPHONE
+             [buffer didModifyRange: NSMakeRange(0, ptr->data.buffer_size)];
++#endif
+ 
+             ptr->data.dirty_bits = 0;
+         }
+@@ -2272,6 +2287,13 @@ void logDirtyBits(GLMContext ctx)
+ 
+             ptr = STATE(active_textures[spirv_binding]);
+ 
++            if (!ptr) {
++                fprintf(stderr, "MGLTEXPROBE frag sampled binding=%u index=%u missing (active mask unit0=%p unit1=%p)\n",
++                        spirv_binding, i, (void*)STATE(active_textures[0]), (void*)STATE(active_textures[1]));
++                textures_to_be_mapped--;
++                continue;
++            }
++
+             if (ptr)
+             {
+                 id<MTLTexture> texture;
+@@ -2693,7 +2715,7 @@ void mtlBlitFramebuffer(GLMContext glm_ctx, GLint srcX0, GLint srcY0, GLint srcX
+ {
+     id<MTLTexture> texture;
+     MTLTextureDescriptor *tex_desc;
+-    NSRect frame;
++    CGRect frame;
+ 
+     assert(_layer);
+     frame = [_layer frame];
+@@ -2741,16 +2763,14 @@ void mtlBlitFramebuffer(GLMContext glm_ctx, GLint srcX0, GLint srcY0, GLint srcX
+ 
+ - (bool) checkDrawBufferSize:(GLuint) index;
+ {
+-    NSRect frame;
+-    NSSize size;
++    CGRect frame;
+ 
+     frame = [_view frame];
+-    size = frame.size;
+ 
+-    if (size.width != _drawBuffers[index].width)
++    if (frame.size.width != _drawBuffers[index].width)
+         return false;
+ 
+-    if (size.height != _drawBuffers[index].height)
++    if (frame.size.height != _drawBuffers[index].height)
+         return false;
+ 
+     return true;
+@@ -2917,7 +2937,7 @@ void mtlBlitFramebuffer(GLMContext glm_ctx, GLint srcX0, GLint srcY0, GLint srcX
+         _drawable = [_layer nextDrawable];
+ 
+         // late init of gl scissor box on attachment to window system
+-        NSRect frame;
++        CGRect frame;
+         frame = [_layer frame];
+ 
+         ctx->state.var.scissor_box[2] = frame.size.width;
+@@ -3187,12 +3207,20 @@ void mtlBlitFramebuffer(GLMContext glm_ctx, GLint srcX0, GLint srcY0, GLint srcX
+         _currentRenderEncoder = nil;
+     }
+ 
+-    // Validate command buffer status - cannot create encoders on committed/buffer
++    // Validate command buffer status - cannot create encoders on committed/buffer.
++    // The engine draws without vsync at 200fps; if the swap tail fails to mint
++    // a fresh buffer (nextDrawable NULL) the next draw lands on the committed
++    // buffer. Self-heal: mint a new buffer and retry instead of recording a GPU
++    // error (which latches recovery mode and spirals into a flicker death-loop).
+     MTLCommandBufferStatus bufferStatus = _currentCommandBuffer.status;
+     if (bufferStatus >= MTLCommandBufferStatusCommitted) {
+-        NSLog(@"MGL ERROR: Cannot create render encoder on committed command buffer (status: %ld)", (long)bufferStatus);
+-        [self recordGPUError];
+-        return false;
++        NSLog(@"MGL WARNING: render encoder on committed buffer (status: %ld) - minting fresh buffer", (long)bufferStatus);
++        [self newCommandBuffer];
++        if (_currentCommandBuffer == NULL) {
++            NSLog(@"MGL ERROR: failed to mint fresh command buffer");
++            [self recordGPUError];
++            return false;
++        }
+     }
+ 
+     NSLog(@"MGL DEBUG: About to create render encoder with descriptor and command buffer");
+@@ -5054,7 +5082,9 @@ void mtlFlush (GLMContext glm_ctx, bool finish)
+         _drawable = [_layer nextDrawable];
+         if (_drawable == NULL) {
+             NSLog(@"MGL WARNING: Failed to get next drawable in mtlSwapBuffers");
+-            // Don't assert - just continue without creating new command buffer
++            // Still mint a fresh command buffer so the next draw does not land
++            // on the just-committed buffer (that used to latch recovery mode).
++            [self newCommandBuffer];
+             return;
+         }
+         
+@@ -5131,7 +5161,9 @@ void mtlClearBuffer (GLMContext glm_ctx, GLuint type, GLbitfield mask)
+     data = mtl_buffer.contents;
+     memcpy(data+offset, ptr, size);
+ 
++#if !TARGET_OS_IPHONE
+     [mtl_buffer didModifyRange:NSMakeRange(offset, size)];
++#endif
+ }
+ 
+ void mtlBufferSubData(GLMContext glm_ctx, Buffer *buf, size_t offset, size_t size, const void *ptr)
+@@ -5157,7 +5189,9 @@ void mtlBufferSubData(GLMContext glm_ctx, Buffer *buf, size_t offset, size_t siz
+         return mtl_buffer.contents + offset;
+     }
+ 
++#if !TARGET_OS_IPHONE
+     [mtl_buffer didModifyRange:NSMakeRange(offset, size)];
++#endif
+ 
+     return NULL;
+ }
+@@ -5175,7 +5209,9 @@ void *mtlMapUnmapBuffer(GLMContext glm_ctx, Buffer *buf, size_t offset, size_t s
+ 
+     mtl_buffer = (__bridge id<MTLBuffer>)(buf->data.mtl_data);
+ 
++#if !TARGET_OS_IPHONE
+     [mtl_buffer didModifyRange:NSMakeRange(offset, length)];
++#endif
+ }
+ 
+ void mtlFlushBufferRange(GLMContext glm_ctx, Buffer *buf, GLintptr offset, GLsizeiptr length)
+@@ -6238,7 +6274,34 @@ void mtlMultiDrawElementsIndirect(GLMContext glm_ctx, GLenum mode, GLenum type,
+     glm_ctx->mtl_funcs.mtlDispatchComputeIndirect = mtlDispatchComputeIndirect;
+ }
+ 
+-- (id) initMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (NSWindow *)window;
++#if TARGET_OS_IPHONE
++
++void* CppCreateMGLRendererAndBindToUIView (void *glm_ctx, void *uiview, float contentsScale)
++{
++    assert(glm_ctx);
++    assert(uiview);
++    MGLRenderer *renderer = [[MGLRenderer alloc] init];
++    assert(renderer);
++    renderer->_layerContentsScale = contentsScale;
++    [renderer createMGLRendererAndBindToContext: glm_ctx view: uiview];
++    return (__bridge void *)(renderer);
++}
++
++void* CppCreateMGLRendererHeadless (void *glm_ctx)
++{
++    assert(glm_ctx);
++    MGLRenderer *renderer = [[MGLRenderer alloc] init];
++    assert(renderer);
++    renderer->_layerContentsScale = 3.0f;
++    UIView *view = [[UIView alloc] initWithFrame:CGRectMake(0.0f, 0.0f, 1.0f, 1.0f)];
++    assert(view);
++    [renderer createMGLRendererAndBindToContext: glm_ctx view: (__bridge void *)view];
++    return (__bridge void *)(renderer);
++}
++
++#else
++
++- (id) initMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (void *)window;
+ {
+     assert (window);
+     assert (glm_ctx);
+@@ -6310,7 +6373,9 @@ void* CppCreateMGLRendererHeadless (void *glm_ctx)
+     return  (__bridge void *)(renderer);
+ }
+ 
+-- (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *) view
++#endif
++
++- (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (void *) view
+ {
+     ctx = glm_ctx;
+ 
+@@ -6368,11 +6433,38 @@ void* CppCreateMGLRendererHeadless (void *glm_ctx)
+ 
+     NSLog(@"MGL INFO: Metal command queue created successfully");
+ 
+-    _view = view;
++#if TARGET_OS_IPHONE
++    _view = (__bridge UIView *)view;
++#else
++    _view = (NSView *)view;
++#endif
+ 
+     // PROPER FIX: Create Metal layer with AGX-safe settings
+     NSLog(@"MGL INFO: PROPER FIX - Creating Metal layer with AGX-safe settings");
+ 
++#if TARGET_OS_IPHONE
++    // SDL_Metal_CreateView's UIView already carries a CAMetalLayer — adopt it.
++    // Headless views carry a plain CALayer: create our own layer and add it as
++    // a sublayer instead.
++    if ([[_view layer] isKindOfClass:[CAMetalLayer class]]) {
++        _layer = (CAMetalLayer *)[_view layer];
++    } else {
++        _layer = [[CAMetalLayer alloc] init];
++    }
++    if (!_layer) {
++        NSLog(@"MGL ERROR: Failed to get CAMetalLayer from UIView");
++        return;
++    }
++    _layer.device = _device;
++    _layer.pixelFormat = ctx->pixel_format.mtl_pixel_format;
++    _layer.framebufferOnly = NO; // enable blitting to main color buffer
++    _layer.magnificationFilter = kCAFilterNearest;
++    _layer.presentsWithTransaction = NO;
++    [_layer setContentsScale: (_layerContentsScale > 0.0f) ? _layerContentsScale : 3.0f];
++    if (_layer.superlayer == nil) {
++        [[_view layer] addSublayer: _layer];
++    }
++#else
+     _layer = [[CAMetalLayer alloc] init];
+     if (!_layer) {
+         NSLog(@"MGL ERROR: Failed to create Metal layer");
+@@ -6382,7 +6474,7 @@ void* CppCreateMGLRendererHeadless (void *glm_ctx)
+     _layer.device = _device;
+     _layer.pixelFormat = ctx->pixel_format.mtl_pixel_format;
+     _layer.framebufferOnly = NO; // enable blitting to main color buffer
+-    _layer.frame = view.layer.frame;
++    _layer.frame = _view.layer.frame;
+     _layer.magnificationFilter = kCAFilterNearest;
+     _layer.presentsWithTransaction = NO;
+ 
+@@ -6396,6 +6488,7 @@ void* CppCreateMGLRendererHeadless (void *glm_ctx)
+     } else {
+         [_view setLayer: _layer];
+     }
++#endif
+ 
+     mglDrawBuffer(glm_ctx, GL_FRONT);
+ 
+@@ -6409,7 +6502,7 @@ void* CppCreateMGLRendererHeadless (void *glm_ctx)
+         NSLog(@"MGL ERROR: Exception creating initial Metal command buffer: %@", exception);
+     }
+     
+-    glm_ctx->mtl_funcs.mtlView = (void *)CFBridgingRetain(view);
++    glm_ctx->mtl_funcs.mtlView = (void *)CFBridgingRetain((__bridge id)view);
+ 
+     // PROACTIVE TEXTURE CREATION: Create essential textures to break sync loop
+     NSLog(@"MGL INFO: PROACTIVE - Creating essential textures to prevent magenta screen");
+diff --git a/MGL/src/buffers.c b/MGL/src/buffers.c
+index 586178d..1363be3 100644
+--- a/MGL/src/buffers.c
++++ b/MGL/src/buffers.c
+@@ -535,6 +535,15 @@ void mglBindBuffer(GLMContext ctx, GLenum target, GLuint buffer)
+         STATE(buffers[index]) = ptr;
+         STATE(dirty_bits) |= DIRTY_BUFFER;
+     }
++
++    // GL: the ELEMENT_ARRAY_BUFFER binding is part of VAO state. Master only
++    // updated the global binding, so validate_vao always found
++    // vao->element_array.buffer NULL and every glDrawElements failed with
++    // "element buffer missing". Mirror the binding into the current VAO.
++    if (target == GL_ELEMENT_ARRAY_BUFFER && STATE(vao) != NULL)
++    {
++        STATE(vao)->element_array.buffer = ptr;
++    }
+ }
+ 
+ void mglBindBufferBase(GLMContext ctx, GLenum target, GLuint index, GLuint buffer)
+diff --git a/MGL/src/get.c b/MGL/src/get.c
+index b153001..e3e0bf9 100644
+--- a/MGL/src/get.c
++++ b/MGL/src/get.c
+@@ -411,6 +411,9 @@ const GLubyte *mglGetString(GLMContext ctx, GLenum name)
+         case GL_SHADING_LANGUAGE_VERSION:
+             return (const GLubyte *)"4.6";
+ 
++        case GL_EXTENSIONS:
++            return (const GLubyte *)"";
++
+         default:
+             assert(0);
+     }
+@@ -436,7 +439,7 @@ const GLubyte  *mglGetStringi(GLMContext ctx, GLenum name, GLuint index)
+         case GL_RENDERER: return (const GLubyte *) "MGL";
+         case GL_VERSION: return (const GLubyte *) "4.6.0";
+         case GL_SHADING_LANGUAGE_VERSION: return (const GLubyte *) "4.6.0";
+-        case GL_EXTENSIONS: return NULL;
++        case GL_EXTENSIONS: return (const GLubyte *)"";
+ 
+         default:
+             assert(0);
+diff --git a/MGL/src/mgl_safety.h b/MGL/src/mgl_safety.h
+index 4f79a4d..0fdf375 100644
+--- a/MGL/src/mgl_safety.h
++++ b/MGL/src/mgl_safety.h
+@@ -105,12 +105,10 @@ extern "C" {
+             return GL_INVALID_OPERATION; \
+         } \
+         \
+-        /* Check for suspiciously high pointer values */ \
+-        if (ptr_val > 0x100000000ULL) { \
+-            fprintf(stderr, "MGL BUFFER ERROR: %s - Suspicious buffer pointer %p at %s:%d\n", \
+-                    (function_name), (ptr), __FILE__, __LINE__); \
+-            return GL_INVALID_OPERATION; \
+-        } \
++        /* On arm64 (iOS sim/device, Apple Silicon) the heap lives entirely \
++         * above 4 GB (0x100000000); rejecting those pointers broke every \
++         * glBufferSubData upload. Only near-null/unaligned pointers are \
++         * rejected above; no high-end ceiling (user space reaches 0x7fff...). */ \
+     } while(0)
+ 
+ // Buffer pointer validation for void functions (returns early instead of returning a value)
+@@ -138,12 +136,7 @@ extern "C" {
+             return; \
+         } \
+         \
+-        /* Check for suspiciously high pointer values */ \
+-        if (ptr_val > 0x100000000ULL) { \
+-            fprintf(stderr, "MGL BUFFER ERROR: %s - Suspicious buffer pointer %p at %s:%d\n", \
+-                    (function_name), (ptr), __FILE__, __LINE__); \
+-            return; \
+-        } \
++        /* no high-end ceiling: arm64 user pointers exceed 4 GB legitimately */ \
+     } while(0)
+ 
+ // Safe buffer size access with validation (for functions that return values)
+diff --git a/MGL/src/pixel_utils.c b/MGL/src/pixel_utils.c
+index cc55593..6e396a5 100644
+--- a/MGL/src/pixel_utils.c
++++ b/MGL/src/pixel_utils.c
+@@ -2425,7 +2425,12 @@ MTLPixelFormat mtlPixelFormatForGLFormatType(GLenum gl_format, GLenum gl_type)
+                 case GL_RG: return MTLPixelFormatRG32Float;
+                 case GL_RGBA: return MTLPixelFormatRGBA32Float;
+                 case GL_DEPTH_COMPONENT: return MTLPixelFormatDepth32Float;
+-                case GL_DEPTH_STENCIL: return MTLPixelFormatDepth24Unorm_Stencil8;
++                case GL_DEPTH_STENCIL:
++#if TARGET_OS_IPHONE
++                    return MTLPixelFormatDepth32Float_Stencil8;
++#else
++                    return MTLPixelFormatDepth24Unorm_Stencil8;
++#endif
+ 
+                 default:
+                     return 0;
+diff --git a/MGL/src/program.c b/MGL/src/program.c
+index 686cb64..60d8c68 100644
+--- a/MGL/src/program.c
++++ b/MGL/src/program.c
+@@ -325,6 +325,18 @@ void mglDetachShader(GLMContext ctx, GLuint program, GLuint shader)
+ 
+     index = sptr->glm_type;
+ 
++    // Detaching from an ALREADY-LINKED program must not invalidate the
++    // program (GL spec: it keeps its own compiled copy). MGL's pipeline
++    // rebuild path (bindMTLProgram -> generatePipelineDescriptor) reads
++    // shader_slots to recreate the Metal functions, so clearing the slot
++    // here makes the next draw assert(vertex_shader). Keep the slot for
++    // linked programs; refcount stays held and glDeleteShader defers the
++    // free until program deletion — exactly GL semantics.
++    if (pptr->linked_glsl_program != NULL)
++    {
++        return;
++    }
++
+     if (pptr->shader_slots[index] != sptr)
+     {
+         return;
+diff --git a/MGL/src/textures.c b/MGL/src/textures.c
+index 93e73ca..d8c8b3b 100644
+--- a/MGL/src/textures.c
++++ b/MGL/src/textures.c
+@@ -1222,7 +1222,9 @@ bool createTextureLevel(GLMContext ctx, Texture *tex, GLuint face, GLint level,
+     {
+         case MTLPixelFormatDepth16Unorm:
+         case MTLPixelFormatDepth32Float:
++#if !TARGET_OS_IPHONE
+         case MTLPixelFormatDepth24Unorm_Stencil8:
++#endif
+         case MTLPixelFormatDepth32Float_Stencil8:
+             tex->mtl_requires_private_storage = true;
+             break;
+diff --git a/MGL/src/uniforms.c b/MGL/src/uniforms.c
+index 29d5e1f..a4a6537 100644
+--- a/MGL/src/uniforms.c
++++ b/MGL/src/uniforms.c
+@@ -66,7 +66,6 @@ GLint  mglGetUniformLocation(GLMContext ctx, GLuint program, const GLchar *name)
+                 GLuint binding;
+ 
+                 binding = ptr->spirv_resources_list[stage][SPVC_RESOURCE_TYPE_UNIFORM_CONSTANT].list[i].binding;
+-
+                 return binding;
+             }
+         }
+diff --git a/MGL/src/vertex_arrays.c b/MGL/src/vertex_arrays.c
+index a54142c..bd1b866 100644
+--- a/MGL/src/vertex_arrays.c
++++ b/MGL/src/vertex_arrays.c
+@@ -133,7 +133,10 @@ void mglBindVertexArray(GLMContext ctx, GLuint array)
+ 
+     if (array == 0)
+     {
+-        ptr = NULL;
++        // VAO 0 is the always-existing default VAO. Materialize it instead of
++        // leaving state.vao NULL: GLES-style clients (this engine) unbind to 0
++        // then reconfigure attribs, and MGL's error paths deref state.vao.
++        ptr = getVAO(ctx, 0);
+     }
+     else
+     {

@@ -349,8 +349,26 @@ static UIImage *SDL_LoadLaunchImageNamed(NSString *name, int screenh)
 
 @end
 
+/* Scene delegate: bridges UIKit scenes to the legacy SDL window/event flow.
+ * Declared before SDLUIKitDelegate's @implementation because
+ * application:configurationForConnectingSceneSession:options: references it. */
+@interface SDLUIKitSceneDelegate : UIResponder <UISceneDelegate>
+@property (nonatomic, strong) UIWindow *window;
+@end
+
 @implementation SDLUIKitDelegate {
     UIWindow *launchWindow;
+    UIWindow *sceneWindow; /* retained for the scene path (may be nil in legacy) */
+}
+
+- (UIWindow *)sceneWindow
+{
+    return sceneWindow;
+}
+
+- (void)setSceneWindow:(UIWindow *)window
+{
+    sceneWindow = window;
 }
 
 /* convenience method */
@@ -367,6 +385,23 @@ static UIImage *SDL_LoadLaunchImageNamed(NSString *name, int screenh)
      * a category to override this method and return the actual name of the
      * delegate */
     return @"SDLUIKitDelegate";
+}
+
+/* Scene lifecycle support (iOS 18+/Xcode 26+ SDK). Modern SDKs abort with
+ * "UIScene life cycle is required for apps built with this SDK" unless the app
+ * delegate opts into scenes and a scene delegate owns the window session. SDL
+ * itself is not scene-based, so SDLUIKitSceneDelegate forwards to the
+ * underlying SDLUIKitDelegate (and the SDL window code reads the scene's
+ * window via -[SDLUIKitDelegate sceneWindow]). */
+- (UISceneConfiguration *)application:(UIApplication *)application
+        configurationForConnectingSceneSession:(UISceneSession *)connectingSceneSession
+           options:(UISceneConnectionOptions *)options
+{
+    UISceneConfiguration *config = [[UISceneConfiguration alloc]
+        initWithName:@"SDLScene"
+        sessionRole:connectingSceneSession.role];
+    config.delegateClass = [SDLUIKitSceneDelegate class];
+    return config;
 }
 
 - (void)hideLaunchScreen
@@ -524,6 +559,54 @@ static UIImage *SDL_LoadLaunchImageNamed(NSString *name, int screenh)
 }
 
 #endif
+
+@end
+
+/* --------------------------------------------------------------------------
+ * SDLUIKitSceneDelegate
+ *
+ * Modern SDKs (iOS 18+/Xcode 26+) require a UIScene lifecycle. UIKit creates
+ * one UIScene per scene configuration; we host the SDL view controller/window
+ * inside it and keep a reference on the shared SDLUIKitDelegate so that
+ * UIKit_CreateWindow can attach its UIWindow to the connected UIWindowScene.
+ * ------------------------------------------------------------------------ */
+@implementation SDLUIKitSceneDelegate
+
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session
+      options:(UISceneConnectionOptions *)connectionOptions
+{
+    UIWindowScene *windowScene = (UIWindowScene *)scene;
+
+    UIWindow *window = [[UIWindow alloc] initWithWindowScene:windowScene];
+    self.window = window;
+
+    /* Hand the scene window to the shared delegate so SDL can use it. */
+    SDLUIKitDelegate *delegate = [SDLUIKitDelegate sharedAppDelegate];
+    [delegate setSceneWindow:window];
+
+    [window makeKeyAndVisible];
+}
+
+- (void)sceneDidBecomeActive:(UIScene *)scene
+{
+    SDL_SendAppEvent(SDL_APP_WILLENTERFOREGROUND);
+    SDL_SendAppEvent(SDL_APP_DIDENTERFOREGROUND);
+}
+
+- (void)sceneWillResignActive:(UIScene *)scene
+{
+    SDL_SendAppEvent(SDL_APP_WILLENTERBACKGROUND);
+}
+
+- (void)sceneDidEnterBackground:(UIScene *)scene
+{
+    SDL_SendAppEvent(SDL_APP_DIDENTERBACKGROUND);
+}
+
+- (void)sceneWillEnterForeground:(UIScene *)scene
+{
+    SDL_SendAppEvent(SDL_APP_WILLENTERFOREGROUND);
+}
 
 @end
 
