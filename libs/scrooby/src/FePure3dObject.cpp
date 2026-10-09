@@ -427,6 +427,16 @@ void FePure3dObject::Render()
     bool oldZBufferEnabled = p3d::pddi->IsZBufferEnabled();
     p3d::pddi->EnableZBuffer( m_zbufferEnabled );
 
+#ifdef RAD_IOS
+    // Colourless GUI geometry (the radar hole) is a depth mask. A world
+    // transparency pass can leave depth writes disabled before the HUD.
+    const bool oldZWrite = p3d::pddi->GetZWrite();
+    if( m_zbufferEnabled && !m_colourWriteEnabled )
+    {
+        p3d::pddi->SetZWrite( true );
+    }
+#endif
+
 #ifdef RAD_XBOX
     // save cull mode setting
     //
@@ -525,6 +535,10 @@ void FePure3dObject::Render()
     // restore z-buffer test
     //
     p3d::pddi->EnableZBuffer( oldZBufferEnabled );
+
+#ifdef RAD_IOS
+    p3d::pddi->SetZWrite( oldZWrite );
+#endif
 
     // restore colour write
     //
@@ -709,4 +723,3 @@ void FePure3dObject::SetDefaultLight( tLight* light )
         m_DefaultLight->AddRef();
     }
 }
-

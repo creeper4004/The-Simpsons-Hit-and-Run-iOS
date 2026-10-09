@@ -5,6 +5,31 @@ Metal, because EAGL/OpenGLES drawables are dead on iOS 26/27. The engine's GL
 calls are translated at runtime GLSL -> glslang -> SPIR-V -> SPIRV-Cross MSL ->
 Metal, with MGL statically linked into the app.
 
+
+## 2026-10-08 rendering repair
+
+The renderer now runs the GLSL interface mapper after linking and before
+SPIR-V generation. `AUTO_MAP_LOCATIONS` alone left UV/color varyings and the
+fragment output without Metal bindings. `iosbuild/shader_interface.h` is shared
+by the vendor patch and the CPU regression probe in `iosbuild/probes/`.
+
+The patch also preserves linked-program lifetime, reports actual link failures,
+ignores uniform location -1, and caches Metal pipelines (up to 256 descriptor
+variants). The engine supplies named attribute locations and complete
+interleaved vertices for retained meshes, preserving white fallback colors.
+
+`mgl-ios.patch` is regenerated against upstream
+`de0ded04ec7dc99182e27e555a17775523b26911`, including the earlier local iOS fixes
+and diagnostics. `iosbuild/build.sh` pins all five source revisions, refreshes
+the wrapper/header on incremental builds, and stops if patch application fails.
+Existing vendor source edits are preserved. Use `FORCE=1 JOBS=8
+mgl-ios/iosbuild/build.sh` from the repository root to rebuild the archives.
+
+Validated: CPU shader-interface regression, archive rebuild, simulator Debug
+app build. **Loaded game pixels and startup timing still require a live run.**
+The 2026-10-08 session lost CoreSimulator/GPU access when local permissions were
+restricted. These are simulator archives; no device archive was produced.
+
 ## Why this directory exists
 
 The original MGL fork lived ONLY in `/tmp/mgl` (sources, iosbuild wrapper,
@@ -20,8 +45,8 @@ the fork was unrecoverable. This directory makes the build reproducible:
 
 ## Rebuild from source
 
-Needs Xcode 27+, cmake, ninja, network (fetches MGL master + glslang +
-SPIRV-Tools + SPIRV-Cross + SPIRV-Headers into `./work/`, gitignored):
+Needs Xcode 27+, cmake, ninja, network (fetches pinned MGL + glslang +
+SPIRV-Tools + SPIRV-Cross + SPIRV-Headers into `./src/mgl/`, gitignored):
 
     iosbuild/build.sh            # -> libs/*.a (arm64 iphonesimulator)
     ../../ios-project/rebuild_ios.sh --run   # rebuild app + install + launch

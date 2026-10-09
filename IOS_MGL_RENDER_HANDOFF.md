@@ -1,5 +1,248 @@
 # iOS MGL Render Bring-Up — Session Handoff (2026-09-03)
 
+## Latest live result — 2026-10-08 evening
+
+### Streamed terrain and radar follow-up (22:24 local)
+
+- User confirms the streamed world and minimap now work on the phone after
+  viewport/scissor conversion and the gameplay/pause loader budget. This
+  includes driving beyond the original spawn area; later levels remain unverified.
+- `/tmp/shar-phone-map-stream.log`: `l1i02.p3d` 369 ms (previous run
+  37,485 ms), `ralph_m.p3d` 66 ms (previous 19,485 ms), `l1z2.p3d`
+  3,100 ms and `l1r2.p3d` 802 ms. Individual runs, not averages.
+- User requested the radar at the upper-right. The existing Android layout
+  and icon-offset compensation are now enabled on iOS. iOS keeps this position
+  when input switches to a controller. Simulator shows the aligned frame/map/
+  icons at upper-right. Final phone install and circular-mask check pending.
+- Passing nil depth state triggered Metal Simulator's "Invalid depth stencil
+  state" failure. An explicit Always/no-write state replaces nil. After restarting
+  the simulator, this renders frontend and gameplay without that failure.
+  Render-pass attachments have not been broadened.
+- A remaining square edge on the simulator is being checked with explicit
+  depth writes for colourless Scrooby mask geometry, restoring the prior write
+  state afterward. Do not mark that follow-up verified until capture review.
+
+### Settings and loading follow-up (22:08 local)
+
+- User's later driving screenshot shows terrain cutting off beyond the spawn
+  area; do not interpret the earlier complete-world confirmation as all regions
+  verified. Phone loads after gameplay begins include `l1i02.p3d` at 37.485 s
+  and gag/character files at 13–32 s each. Gameplay/pause streaming now receives
+  a smaller 4-pass/2-ms budget while the loading-screen budget stays 8-pass/4-ms.
+  Visual verification of region boundaries is pending.
+
+- Both phone crashes at 21:57:16 and 22:00:23 are in
+  `CGuiMenu::SetSelectionValue`, from `CGuiScreenPauseSettings::InitIntro`.
+  iOS uses PC assets but requested absent console InvertCamControl/Vibration
+  rows. The constructor returned with a partially initialized menu. iOS now
+  uses the PC row set consistently in construction, enums and settings updates.
+  User confirms Sound and Settings now show and work on the phone; simulator
+  capture shows Camera/Jump Cameras/Navigation/Radar/Tutorial with values.
+- Bounded loader servicing (up to 8 extra passes / 4 ms between passes) now
+  runs during bootup and level loading. Phone initial-menu engine uptime is
+  9.837 s versus 55.780 s in the previous measured build. New Game loading
+  is 17.860 s (previous budget run 18.935 s; earlier builds about 79–88 s).
+  Simulator loading is 1.807 s versus 7.576 s before the budget; bootup-to-menu
+  takes 3.002 s. These are individual instrumented runs, not benchmark averages.
+- Capture `/tmp/shar-captures/settings-boot-fix-20261008/` contains 474 frames
+  over 240 seconds. Phone log is `/tmp/shar-phone-settings-boot.log`.
+- User reports a map-sized world patch near Marge. MGL passed bottom-left GL
+  viewport/scissor coordinates directly to top-left Metal coordinates. The
+  conversion removes the displaced patch in the simulator, but circular mask/
+  map content still need verification. Explicitly resetting disabled depth state
+  is being checked separately; render-pass attachment behavior is unchanged.
+
+### World and movement recovery (21:57 local)
+
+- User confirms movement works on the phone after enabling the portable touch
+  HUD axis update/clear path for iOS. Buttons and New Game already worked.
+- **Ground/buildings now render on both simulator and phone.** User confirms
+  the phone world looks complete. Simulator capture
+  `/tmp/shar-captures/world-count-fix-20261008/` shows lawn, path, house,
+  garage and hedges, plus Homer/Marge, minimap and touch controls.
+- Root cause: `pglPrimBuffer::Lock()` resets `total` for each attribute chunk.
+  The loader locks again for indices/metadata, leaving that cursor at zero.
+  iOS's complete-layout upload copied only `total` vertices, zeroing static
+  indexed meshes. `populatedVertices` now preserves the high-water vertex
+  count on unlock; uploads and non-indexed draws use that count.
+- The unlit material shader path is enabled on iOS, matching Android. Small
+  Metal buffers no longer receive a duplicate retained reference. Two hot
+  command-buffer success logs are now gated by `MGL_VERBOSE_LOG`.
+- Disabling culling did not restore terrain. A separate experiment attaching
+  depth throughout disabled-depth draws crashed the simulator Metal service;
+  it was reverted. Do not reapply that experiment as a verified fix.
+- User clarifies the slow phone phase is **after New Game**, not initial boot.
+  Earlier phone logs show about 79–88 seconds in that level-loading phase.
+  Simulator world-count run took 7.6 s from loading context to gameplay.
+  A bounded additional loader-service budget (8 passes, 4 ms, only during
+  `CONTEXT_LOADING_GAMEPLAY`) is being measured. `IOS_LOAD_COMPLETE` records
+  per-file durations; game-state markers now include engine `uptime_ms`.
+
+The world recovery supersedes the missing-ground status below. Broad gameplay,
+driving, later levels and long-session stability have not been verified.
+
+### New Game and touch follow-up (21:36 local)
+
+- User confirms the recovered living-room menu on the real phone.
+- Crash report `Simpsons-2026-10-08-212352.ips` is EXC_BAD_ACCESS in
+  `mglDeleteBuffers`, called while `FrontEndContext::OnStop` unloads menu meshes.
+  The GL target enum 34962 was used as both binding and vertex attribute index.
+  Cleanup now visits bounded binding/VAO slots and clears deleted references;
+  VM-only buffer backing is released with the task port.
+- SPIRV-Cross's `SPVC_COMPILER_OPTION_FIXUP_DEPTH_CONVENTION` converts OpenGL
+  clip depth to Metal's range. Without it, the HUD sprites at the near plane
+  were clipped even with depth testing disabled. Touch icons now render.
+- The existing virtual touch controller and queued-input flush were compiled
+  for Android only. Both are enabled for iOS. Simulator touch confirm starts
+  New Game and dismisses the tutorial. No controller was needed for this run.
+- Simulator capture `/tmp/shar-captures/touch-fallback-fix-20261008/` has 479
+  half-second frames over 240 s. Menu appears at 19.5 s, touch New Game reaches
+  loading at 38.3 s and gameplay at 46.0 s. Phone logs also reach gameplay.
+  No recurrence of the reported menu-unload crash in these runs.
+- **Remaining rendering issue:** gameplay shows Homer/Marge, minimap, props,
+  tutorial UI and touch controls, but most ground/buildings are missing against
+  the sky. Full gameplay rendering is not fixed. Indexed mesh/state inspection
+  is in progress; do not regress the now readable frontend.
+- HUD diagnostic files are now opt-in and updated once per second, instead of
+  rewriting them every frame. The report has game state jump buttons and action
+  markers; `--report-only` regenerates an existing capture without relaunching.
+
+**The legal page and complete NEW GAME living-room menu now render.** The
+150-second simulator capture at `/tmp/shar-captures/stream-fix-20261008/`
+contains 300 half-second screenshots, video, a compressed full console log,
+and an interactive `timeline.html`. Legal artwork is readable around 15 s;
+the menu is visible around 29 s. Earlier cyan-only screenshots and permission
+blockers below are historical. Full gameplay still needs a live check.
+
+Additional fixes found during live investigation:
+
+- Standalone uniforms now have program-owned storage. Vertex/fragment Metal
+  binding numbers no longer alias modelview with fragment alpharef, or values
+  across different programs. Struct members such as `light0.enabled` resolve
+  to native MSL offsets. Sampler locations resolve and retain texture units.
+- Uniform updates rebind copied Metal bytes even when other GL state is dirty.
+- Immediate streams orphan and exactly size their VBO for each draw. Previously
+  later draws overwrote shared GPU memory, and a large mesh permanently moved
+  even tiny UI quads onto that unsafe path.
+- Buffer reallocation clears released Metal pointers and frees VM-only backing.
+- VAO object dirtiness propagates into the renderer's context state; depth and
+  stencil survive the many render passes used by the bridge.
+- Blend setters invalidate the pipeline's alpha state. Blend/write masks are
+  refreshed for opaque and transparent pipelines. This addresses the black
+  effect rectangles seen in the first recovered-menu capture.
+- A timed follow-up capture exposed a CPU crash in a legacy texture probe:
+  `gltex.cpp:137` scanned BC-compressed bytes as RGBA. It now samples the actual
+  decompressed image before freeing it, under `IOS_ATTRIB_PROBE`.
+- Repetitive renderer INFO/DEBUG logs are opt-in via `MGL_VERBOSE_LOG`.
+  `IOS_FRAME_STATS` emits bounded draw/frame/pipeline summaries. Game context
+  transitions emit `IOS_GAME_STATE`; the status file updates on state changes.
+
+`mgl-ios/iosbuild/probes/capture-simulator.py` automates this capture and report.
+See its README for usage, timing limitations, and action markers. Captures stop
+the app at the end and remain outside Git. The full vendor changes are retained
+in `mgl-ios/mgl-ios.patch`; simulator and device libraries remain separate.
+
+The paired phone accepted the signed Release app and launched it. Its current
+logs reach gameplay after New Game; the user confirmed the menu recovery.
+Visual/input verification of the latest phone build is being collected. Do
+not claim complete world/device correctness from the frontend screenshot alone.
+
+## 2026-10-08 UPDATE — shader interface repair built; visual validation pending
+
+**Current result:** concrete renderer fixes are implemented and the simulator
+Debug app builds. A CPU regression reproduces missing shader bindings and
+verifies the correction through SPIR-V and generated Metal source. No loaded
+screenshot of this new build was obtained. Do not mark the cyan/white artifacts
+or the 1–2 minute startup delay resolved until a live run confirms it.
+
+### Confirmed defects and changes
+
+1. **Missing shader interface mapping.** `AUTO_MAP_LOCATIONS` was enabled in
+   `shaders.c`, but `program.c` generated SPIR-V without applying the mapper.
+   The CPU reproduction showed `tc`, `cpri`, and `csec` with no Location
+   decorations; generated Metal lacked `[[user(locnN)]]`, and the fragment
+   output lacked `[[color(0)]]`. The simple default `map_io()` call also failed
+   a reordered-declaration test. The fix uses the **GLSL resolver and mapper**
+   to match linked stages by name, via `iosbuild/shader_interface.h`.
+2. **Retained mesh fallback attributes.** `pglPrimBuffer::Display()` changed
+   `GL_ARRAY_BUFFER` to the normal fallback and then configured real UV/color
+   pointers without restoring the mesh binding. Its one-element white buffer
+   also assumed stride 0 meant constant; GL advances tightly packed vertices.
+   The iOS retained path now uploads complete 36-byte interleaved vertices,
+   with zero normal/UV and white color defaults, matching the immediate path.
+3. **Attribute location assumptions.** iOS translation now maps
+   position/normal/texcoord/color to slots 0/1/2/3 by name. It bypasses MGL's
+   unimplemented `glBindAttribLocation` and verifies active locations after
+   linking. The prior `IOS_ATTRIB_PROBE` instrumentation is preserved.
+4. **Pipeline recompilation.** The restored source did not contain the old
+   pipeline cache. A cache now keys on shader functions, attachments, blend
+   state, and vertex layouts; it holds up to 256 variants. Real pipeline
+   errors are reported instead of compiling dummy black fallback shaders.
+   This removes redundant compilation; the startup improvement is unmeasured.
+5. **Program/uniform lifetime and errors.** Uniform location -1 is ignored.
+   Linked glslang programs remain alive until replacement/deletion (the old
+   pointer was freed immediately and then freed again on program deletion).
+   Link/map failures now stop the link, and `GL_LINK_STATUS` reflects success.
+
+### Validation and durable source
+
+- `FORCE=1 JOBS=8 mgl-ios/iosbuild/build.sh`: succeeds, simulator archives staged.
+- `xcodebuild ... -configuration Debug -sdk iphonesimulator
+  -destination 'generic/platform=iOS Simulator'`: succeeds. Product:
+  `build_ios/code/Debug-iphonesimulator/Simpsons.app`.
+- `mgl-ios/iosbuild/probes/`: standalone CPU regression, **PASS**. It shares
+  the renderer's mapping helper, checks both stages' bindings with reordered
+  declarations and both resolver stages, and checks the emitted MSL semantics.
+  This is a compiler/interface check, not a GPU rendering test.
+- `mgl-ios/mgl-ios.patch` now captures the restored source's earlier local
+  fixes/probes plus these changes. Applying it to pristine upstream `de0ded0`
+  reproduces the modified vendor files. The build script pins MGL and the four
+  shader-toolchain repos, refreshes its wrapper/helper, and fails on a bad patch.
+- Logs/artifacts: `/tmp/shar-render-20261008/{vendor-build.log,
+  app-build-final.log,probe-results.txt,probe-output/}`. Probe source and rebuild
+  instructions are tracked under `mgl-ios/iosbuild/probes/`; temporary logs
+  are not the only record of the fix.
+
+### Runtime limitation and next step
+
+The previous app was launched on simulator `61AB94C5-4A22-4BBD-8250-F97EDA345549`
+before session permissions changed. Subsequent `simctl` calls fail with
+`Operation not permitted` / CoreSimulator connection invalid. An optional
+native offscreen test also reports no accessible Metal device. User permission
+was requested and granted conversationally, but the actual session environment
+remained restricted. No new loaded baseline or post-fix screenshot was captured.
+
+Once CoreSimulator access is available, install this built app and capture
+console output with `simctl launch --console` redirected by the host shell.
+Enable `SIMCTL_CHILD_IOS_ATTRIB_PROBE=1`, let the full known asset load finish,
+and compare the legal page/logo/UI. Check shader/link/pipeline errors first;
+then inspect remaining buffer/texture problems if needed. Measure time to the
+first actual game drawing and pipeline compilation count. Device rendering
+still needs a separate device archive rebuild and run; current archives are
+simulator slices. A renderer replacement was not needed for this repair.
+
+
+## 2026-09-26 UPDATE — first-draw vertex-location probe
+
+- `IOS_ATTRIB_PROBE` is an opt-in launch environment variable. The iOS GLSL
+  translator logs each injected vertex-input declaration/location, and MGL
+  logs one draw's reflected SPIR-V input locations plus enabled VAO slots,
+  formats, stride, offsets, and Metal-buffer availability.
+- Simulator Debug build succeeds with the probe. On the first captured draw
+  (`GL_TRIANGLE_STRIP`, program 2, four vertices), SPIR-V locations are
+  `0,1,2,3`; enabled VAO slots are `0..3`, with the expected interleaved
+  offsets `0,12,24,32` and stride `36`. The translated built-in declarations
+  are `position`, `normal`, `texcoord`, `color` at locations `0..3`.
+- This verifies the built-in program's translated locations match the engine
+  arrays for this draw. The Metal buffer diagnostic reports length 0 and a
+  null contents pointer for the attribute buffer, so this run did **not** yet
+  verify the bytes Metal fetches. Investigate buffer creation/binding in
+  `processGLState` / `bindMTLBuffer` before concluding vertex data is correct.
+  Other runtime shader declarations still need comparison against their
+  program's reflected locations.
+- Reproduce with `SIMCTL_CHILD_IOS_ATTRIB_PROBE=1` set for `simctl launch`;
+  filter console output for `IOS_ATTRIB_PROBE`. The probe is off by default.
+
 ## 2026-09-26 UPDATE — simulator Debug baseline restored; rendering remains broken
 
 This update supersedes the September 4 run as the current build/runtime
@@ -505,3 +748,37 @@ Candidate next probes (not yet run):
 - Texture dumps: /tmp/shar_tex_*.rgba|*_w.png|*_k.png; composite
   /tmp/page_expect.png; screenshots /tmp/shar*.png.
 - mgl-ios.patch needs a regeneration pass once probes are stripped.
+
+## 2026-10-08 continuation: live renderer result
+
+The simulator was restored and the current build was run on iPhone 17 / iOS 27
+(`61AB94C5-4A22-4BBD-8250-F97EDA345549`). The viewport probe initially printed
+zero dimensions because the diagnostic used floating-point formatting for an
+integer array; the actual viewport is `2622x1206`. Blend disabled/enabled tests
+did not change the result, and the command-buffer churn stopped after the
+`glFlush(finish=false)` change.
+
+The decisive failure was uniform reflection: all 13 vertex standalone uniforms
+reported SPIR-V binding `0`, so modelview, projection, and lighting values were
+aliased to one buffer. `program.c` now assigns each `UNIFORM_CONSTANT` resource
+a stable binding before MSL generation. Missing optional uniforms receive a
+zero-initialized default buffer, matching OpenGL's default-uniform behavior.
+
+Verification after that fix:
+
+- Simulator build, install, and launch succeed.
+- The app reaches `gui-project-load-complete` states 2, 4, 6, and 7 and emits
+  `fe-start` instead of looping on pipeline/map failures.
+- Screenshots now contain real rendered front-end geometry/boot marks over the
+  intended `FE_BLUE_SKY_COLOUR` background; the previous all-cyan artifact was
+  replaced by changing scene content. This is a substantial renderer recovery,
+  but the full legal/logo/menu composition still needs visual work.
+- A signed device build was produced with the device MGL archive at
+  `mgl-ios/work/iphoneos/libs`. Installation was attempted on the paired iPhone
+  (`00008150-001928C80CA1401C`) and was refused only because the phone was
+  locked; no renderer/device failure was observed.
+
+The remaining visual issue is now after shader transform and pipeline setup:
+some front-end elements/textures are absent or malformed even though geometry
+draws. Continue with per-draw UV/texture sampling inspection rather than
+viewport, blend, or command-buffer debugging.

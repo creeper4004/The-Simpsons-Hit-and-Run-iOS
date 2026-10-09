@@ -58,7 +58,7 @@ pglProgram::pglProgram()
     program = 0;
     projection = modelview = normalmatrix = alpharef = sampler = acs = -1;
 
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     lit = -1;
     #endif
 
@@ -149,7 +149,7 @@ void pglProgram::SetTextureEnvironment(const pglTextureEnv* texEnv)
         glUniform1i(sampler, 0);
 
 
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     if (lit >= 0)
         glUniform1i(lit, texEnv->lit ? 1 : 0);
     #endif
@@ -282,10 +282,12 @@ bool pglProgram::LinkProgram(GLuint vertexShader, GLuint fragmentShader)
     if(fragmentShader)
         glAttachShader(program, fragmentShader);
 
+#ifndef RAD_IOS
     glBindAttribLocation(program, 0, "position");
     glBindAttribLocation(program, 1, "normal");
     glBindAttribLocation(program, 2, "texcoord");
     glBindAttribLocation(program, 3, "color");
+#endif
 
     glLinkProgram(program);
 
@@ -311,6 +313,21 @@ bool pglProgram::LinkProgram(GLuint vertexShader, GLuint fragmentShader)
         return false;
     }
     
+#ifdef RAD_IOS
+    // MGL does not implement glBindAttribLocation. The translator supplies
+    // explicit locations by semantic name; verify the linked result as well.
+    const char* attributes[] = {"position", "normal", "texcoord", "color"};
+    for (GLint slot = 0; slot < 4; ++slot)
+    {
+        GLint actual = glGetAttribLocation(program, attributes[slot]);
+        if (actual >= 0 && actual != slot)
+        {
+            SDL_Log("iOS shader attribute %s linked at %d, expected %d",
+                    attributes[slot], actual, slot);
+            return false;
+        }
+    }
+#endif
     projection = glGetUniformLocation(program, "projection");
     modelview = glGetUniformLocation(program, "modelview");
     normalmatrix = glGetUniformLocation(program, "normalmatrix");
@@ -340,7 +357,7 @@ bool pglProgram::LinkProgram(GLuint vertexShader, GLuint fragmentShader)
     ecm = glGetUniformLocation(program, "ecm");
     srm = glGetUniformLocation(program, "srm");
 
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     lit = glGetUniformLocation(program, "lit");
     #endif
 
@@ -400,10 +417,11 @@ static std::string esToDesktopGLSL(const char* source, GLenum type)
     std::string out;
     if (source && strstr(source, "#version") == NULL)
         out = "#version 100\n";
-    int vInLoc = 0;
+    int nextExtraInput = 4;
     std::string line;
     std::istringstream ss(source ? source : "");
     bool fragUsesFragColor = false;
+    const bool attribProbe = getenv("IOS_ATTRIB_PROBE") != NULL;
     std::string body;
     while (std::getline(ss, line))
     {
@@ -451,8 +469,27 @@ static std::string esToDesktopGLSL(const char* source, GLenum type)
             while (*lt == ' ' || *lt == '\t') ++lt;
             if (p == std::string::npos && strncmp(lt, "in ", 3) == 0)
             {
+                std::istringstream declaration(lt + 3);
+                std::string inputType, inputName;
+                declaration >> inputType >> inputName;
+                inputName = inputName.substr(0, inputName.find_first_of(";["));
+                const char* attributes[] = {"position", "normal", "texcoord", "color"};
+                int vInLoc = -1;
+                for (int slot = 0; slot < 4; ++slot)
+                    if (inputName == attributes[slot]) vInLoc = slot;
+                if (vInLoc < 0) vInLoc = nextExtraInput++;
+                if (attribProbe)
+                {
+                    const char* decl = lt + 3;
+                    const char* end = strchr(decl, ';');
+                    std::string input(decl, end ? (size_t)(end - decl) : strlen(decl));
+                    SDL_Log("IOS_ATTRIB_PROBE injected location=%d declaration='%s'", vInLoc, input.c_str());
+                }
                 line.insert(0, "layout(location = " + std::to_string(vInLoc) + ") ");
-                vInLoc++;
+            }
+            else if (attribProbe && p != std::string::npos && strncmp(lt, "layout(", 7) == 0)
+            {
+                SDL_Log("IOS_ATTRIB_PROBE explicit-layout declaration='%s'", lt);
             }
         }
         // ES texture sampling entry points

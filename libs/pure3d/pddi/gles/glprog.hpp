@@ -67,7 +67,7 @@ protected:
         GLint enabled, position, colour, attenuation;
     } lights[PDDI_MAX_LIGHTS];
     GLint acs, acm, dcm, scm, ecm, srm;
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     // Ubicación del uniform "lit" del vertex shader.
     GLint lit;
     #endif

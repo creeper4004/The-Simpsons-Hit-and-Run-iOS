@@ -6,7 +6,7 @@
 #include <input/inputmanager.h>
 #include <math.h>
 
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 #include <input/touch/touchcameracontroller.h>
 #include <input/touch/touchinteractionresolver.h>
 #endif
@@ -334,7 +334,7 @@ void TouchHudSystem::Update( unsigned int elapsedMs )
         mCurrentProfile = resolvedProfile;
     }
     UpdateCurrentInteraction();
-    #if defined(RAD_ANDROID)
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
         /*
         *Se actualiza aunque este el dedo pulsado en pantalla
         */
@@ -351,7 +351,7 @@ void TouchHudSystem::Update( unsigned int elapsedMs )
 
 bool TouchHudSystem::RejectTouchInputIfSuppressed()
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     const bool touchSuppressed =
         !TouchInputModeManager::GetInstance().ShouldShowTouchHud();
 
@@ -1698,7 +1698,7 @@ void TouchHudSystem::QueueTouchAction( TouchActionId action, float value )
         return;
     }
 
-    #if defined(RAD_ANDROID)
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
         if ( action == TOUCH_ACTION_CAMERA_TOGGLE )
         {
             if ( value > 0.5f )
@@ -1744,7 +1744,7 @@ void TouchHudSystem::SetMovementActionState
 
 void TouchHudSystem::ApplyMovementActions()
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     if ( !mMovement.active )
     {
         return;
@@ -1810,7 +1810,7 @@ void TouchHudSystem::ApplyMovementActions()
 
 void TouchHudSystem::ClearMovementActions()
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     /*
      * Soltar el joystick táctil equivale a devolver el stick izquierdo
      * al centro.
@@ -1899,7 +1899,7 @@ float TouchHudSystem::Clamp01( float value ) const
 
 void TouchHudSystem::UpdateCurrentInteraction()
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     if ( mCurrentProfile != TOUCH_PROFILE_CHARACTER )
     {
         mCurrentInteractionType = TOUCH_INTERACTION_NONE;
@@ -1937,7 +1937,7 @@ TouchRect TouchHudSystem::GetEffectiveControlRect
         return control->rect;
     }
 
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     return TouchControlsConfigurationManager::GetInstance().GetEffectiveRect(
         controlId,
         control->rect
@@ -2034,7 +2034,7 @@ bool TouchHudSystem::ShouldControlBeUsedForProfile
 
 void TouchHudSystem::BeginTouchControlsEditMode( TouchControlsEditorFlow editorFlow )
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     ClearActiveTouches();
 
     TouchInputAdapter::GetInstance().ClearQueuedInputs();
@@ -2086,7 +2086,7 @@ void TouchHudSystem::BeginTouchControlsEditMode( TouchControlsEditorFlow editorF
 
 void TouchHudSystem::EndTouchControlsEditMode()
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     TouchControlsConfigurationManager::GetInstance().Save();
 
     TouchInputAdapter::GetInstance().ClearQueuedInputs();
@@ -2104,7 +2104,7 @@ void TouchHudSystem::EndTouchControlsEditMode()
 
 void TouchHudSystem::AdvanceTouchControlsEditLayout()
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     TouchControlsConfigurationManager::GetInstance().Save();
 #endif
 
@@ -2133,7 +2133,7 @@ void TouchHudSystem::AdvanceTouchControlsEditLayout()
 
 void TouchHudSystem::ResetCurrentTouchControlsEditLayout()
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     TouchControlsConfigurationManager::GetInstance().ResetLayout(
         mCurrentEditableLayout
     );
@@ -2215,7 +2215,7 @@ void TouchHudSystem::UpdateEditControl
     float y
 )
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     if ( finger == 0 )
     {
         return;
@@ -2268,7 +2268,7 @@ void TouchHudSystem::UpdateEditControl
 
 void TouchHudSystem::EndEditControl( TouchHudFingerState* finger )
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     if ( finger == 0 )
     {
         return;
@@ -2298,7 +2298,7 @@ void TouchHudSystem::ApplyCharacterEditMovementRestriction
     TouchHudControlId controlId
 )
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     if ( mCurrentEditableLayout != TOUCH_EDITABLE_LAYOUT_CHARACTER )
     {
         return;
@@ -2367,7 +2367,7 @@ bool TouchHudSystem::IsFrontendArrowGroupTouch( float x, float y ) const
         return false;
     }
 
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     TouchControlsConfigurationManager& configManager =
         TouchControlsConfigurationManager::GetInstance();
 
@@ -2443,7 +2443,7 @@ void TouchHudSystem::MoveFrontendArrowGroup
     float deltaY
 )
 {
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     TouchControlsConfigurationManager& configManager =
         TouchControlsConfigurationManager::GetInstance();
 

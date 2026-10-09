@@ -9,6 +9,8 @@
 #include <pddi/pddi.hpp>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 #include <input/touch/touchcontrolsconfigurationmanager.h>
 #include <input/touch/touchplatformpaths.h>
 #if defined(RAD_ANDROID) || defined(RAD_IOS)
@@ -155,7 +157,11 @@ void TouchHudRenderer::Render()
 {
 #if defined(RAD_IOS)
     // Diag: registrar que gate impide dibujar el HUD.
+    static time_t lastDiagnostic = 0;
+    const time_t now = time( NULL );
+    if ( getenv( "IOS_ATTRIB_PROBE" ) != NULL && now != lastDiagnostic )
     {
+        lastDiagnostic = now;
         char dp[ 1024 ] = { 0 };
         snprintf( dp, sizeof(dp), "%s/srr2_hud.txt", GetTouchWriteBasePath() );
         FILE* f = fopen( dp, "w" );

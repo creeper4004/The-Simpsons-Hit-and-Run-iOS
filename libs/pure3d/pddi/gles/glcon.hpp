@@ -172,6 +172,7 @@ protected:
 
     unsigned allocated;
     unsigned total;
+    unsigned populatedVertices;
     unsigned stride;
 
     unsigned short* indices;
@@ -186,4 +187,3 @@ protected:
 };
     
 #endif
-

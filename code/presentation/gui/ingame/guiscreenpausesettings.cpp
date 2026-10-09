@@ -71,12 +71,12 @@ const char* PAUSE_SETTINGS_MENU_ITEMS[] =
 {
     "Camera",
     "JumpCamera",
-#if !defined(RAD_PC)// && !defined(RAD_ANDROID)
+#if !defined(RAD_PC) && !defined(RAD_IOS)
     "InvertCamControl",
 #endif
     "IntersectNavSystem",
     "Radar",
-#if !defined(RAD_PC) //&& !defined(RAD_ANDROID)
+#if !defined(RAD_PC) && !defined(RAD_IOS)
     "Vibration",
 #endif
     #if !defined(RAD_ANDROID)
@@ -424,7 +424,7 @@ void CGuiScreenPauseSettings::HandleMessage
                     //
                     GetSuperCamManager()->GetSCC( 0 )->Update( 0 );
                 }
-#if !defined(RAD_PC) && !defined(RAD_ANDROID)
+#if !defined(RAD_PC) && !defined(RAD_ANDROID) && !defined(RAD_IOS)
                 else if( param1 == MENU_ITEM_VIBRATION )
                 {
                     if( param2 == 1 ) // vibration turned ON
@@ -530,7 +530,7 @@ void CGuiScreenPauseSettings::InitIntro()
     //
     bool isSettingOn = false;
 
-#if !defined(RAD_PC)
+#if !defined(RAD_PC) && !defined(RAD_IOS)
 
 #if defined(RAD_ANDROID)
     {
@@ -643,7 +643,7 @@ void CGuiScreenPauseSettings::InitIntro()
     );
 #endif
 
-#if !defined(RAD_PC)
+#if !defined(RAD_PC) && !defined(RAD_IOS)
 
 #if defined(RAD_ANDROID)
     {
@@ -732,7 +732,7 @@ void CGuiScreenPauseSettings::InitOutro()
     rAssert( m_pMenu != NULL );
     bool isSettingOn = false;
 
-    #if !defined(RAD_PC)
+    #if !defined(RAD_PC) && !defined(RAD_IOS)
 
 #if defined(RAD_ANDROID)
     {
@@ -822,7 +822,7 @@ void CGuiScreenPauseSettings::InitOutro()
     GetGuiSystem()->SetRadarEnabled( isSettingOn );
 #endif
 
-#if !defined(RAD_PC)
+#if !defined(RAD_PC) && !defined(RAD_IOS)
 
 #if defined(RAD_ANDROID)
     {

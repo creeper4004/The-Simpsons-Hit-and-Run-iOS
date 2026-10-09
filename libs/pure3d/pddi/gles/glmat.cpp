@@ -74,7 +74,7 @@ GLenum uvTable[3] =
     GL_CLAMP_TO_EDGE
 };
 
-GLenum alphaBlendTable[8][3] =
+GLenum alphaBlendTable[PDDI_BLEND_DESTALPHA + 1][3] =
 {
     { GL_FUNC_ADD, GL_ONE, GL_ZERO },                       //PDDI_BLEND_NONE,
     { GL_FUNC_ADD, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA },  //PDDI_BLEND_ALPHA
@@ -83,7 +83,8 @@ GLenum alphaBlendTable[8][3] =
     { GL_FUNC_ADD, GL_DST_COLOR, GL_ZERO },                 //PDDI_BLEND_MODULATE,
     { GL_FUNC_ADD, GL_DST_COLOR, GL_SRC_COLOR},             //PDDI_BLEND_MODULATE2,
     { GL_FUNC_ADD, GL_ONE, GL_SRC_ALPHA},                   //PDDI_BLEND_ADDMODULATEALPHA,
-    { GL_FUNC_REVERSE_SUBTRACT, GL_SRC_ALPHA, GL_SRC_ALPHA} //PDDI_BLEND_SUBMODULATEALPHA
+    { GL_FUNC_REVERSE_SUBTRACT, GL_SRC_ALPHA, GL_SRC_ALPHA},//PDDI_BLEND_SUBMODULATEALPHA
+    { GL_FUNC_ADD, GL_DST_ALPHA, GL_ONE_MINUS_DST_ALPHA }  //PDDI_BLEND_DESTALPHA
 };
 
 pglMat::pglMat(pglContext* c) 
@@ -228,6 +229,11 @@ void pglMat::SetShininess(float power)
 
 void pglMat::SetBlendMode(int mode) 
 {
+    if (mode < PDDI_BLEND_NONE || mode > PDDI_BLEND_DESTALPHA)
+    {
+        PDDIASSERT(false);
+        return;
+    }
     texEnv[pass].alphaBlendMode = (pddiBlendMode)mode;
 }
 

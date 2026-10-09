@@ -35,6 +35,8 @@
 #include <mission/gameplaymanager.h>
 
 #ifdef RAD_IOS
+#include <stdio.h>
+#include <stdlib.h>
 extern "C" void iOSProgress(const char* stage);
 #endif
 
@@ -313,6 +315,9 @@ void LoadingManager::OnLoadFileComplete( void* pUserData )
         // record the file that just finished loading
         static char buf[ 512 ];
         LoadingRequest& req = mRequests[mRequestHead];
+        if (getenv("IOS_ATTRIB_PROBE"))
+            fprintf(stderr, "IOS_LOAD_COMPLETE name=%s duration_ms=%u uptime_ms=%u\n",
+                    req.filename, radTimeGetMilliseconds() - req.startTime, radTimeGetMilliseconds());
         snprintf( buf, sizeof(buf), "load-complete:%s", req.filename );
         iOSProgress( buf );
     }
@@ -671,5 +676,3 @@ void LoadingManager::ProcessNextRequest()
         }
     }
 }
-
-

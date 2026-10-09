@@ -9,6 +9,7 @@
 #include <pddi/gles/decompress.hpp>
 
 #include <math.h>
+#include <cstdlib>
 #include <pddi/base/debug.hpp>
 #include <radmemory.hpp>
 
@@ -124,26 +125,27 @@ void pglTexture::SetGLState(void)
             glTexImage2D(GL_TEXTURE_2D, 0, PickPixelFormat(lock.format), xSize,
                 ySize, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                 image);
-            delete [] image;
 #if defined(RAD_IOS)
             {
                 static int sTexProbes = 0;
-                if (sTexProbes < 20) {
-                    const unsigned char* px = (const unsigned char*)bits[0];
+                if (getenv("IOS_ATTRIB_PROBE") && sTexProbes < 20) {
+                    // bits[0] is BC-compressed and cannot be scanned as RGBA.
+                    // Inspect the decompressed allocation before releasing it.
+                    const unsigned char* px = image;
                     unsigned int n = (unsigned int)xSize * (unsigned int)ySize;
                     if (n > 0) {
                         unsigned long long r=0,g=0,b=0,a=0; unsigned int cnt=0;
                         const unsigned char* q = px;
                         for (unsigned int i=0;i<n && cnt<40000;i++,q+=4,cnt++){ r+=q[0];g+=q[1];b+=q[2];a+=q[3]; }
-                        FILE*_f=fopen("/tmp/shar_tex.txt","a");
-                        if(_f){ fprintf(_f,"TEX %dx%d fmt=%d native=%d type=%d avg(%llu,%llu,%llu,%llu) first=%02x%02x%02x%02x\n",
+                        fprintf(stderr,"IOS_TEXTURE_DECODE %dx%d fmt=%d native=%d type=%d avg(%llu,%llu,%llu,%llu) first=%02x%02x%02x%02x\n",
                             xSize,ySize,lock.format,lock.native?1:0,type,cnt?r/cnt:0,cnt?g/cnt:0,cnt?b/cnt:0,cnt?a/cnt:0,
-                            px[0],px[1],px[2],px[3]); fclose(_f); }
+                            px[0],px[1],px[2],px[3]);
                     }
                     sTexProbes++;
                 }
             }
 #endif
+            delete [] image;
 
 #endif
         }
@@ -452,5 +454,3 @@ int pglTexture::GetPalette(pddiColour* palette)
 {
     return 0;
 }
-
-

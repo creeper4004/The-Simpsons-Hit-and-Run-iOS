@@ -40,6 +40,9 @@
 #include <main/commandlineoptions.h>
 #include <main/game.h>
 #include <main/platform.h>
+#ifdef RAD_IOS
+#include <loading/loadingmanager.h>
+#endif
 
 #ifdef RAD_GAMECUBE
 #include <main/gamecube_extras/gcmanager.h>
@@ -127,11 +130,29 @@ static void UpdateTouchContextResolverFromGame()
 
 #ifdef RAD_IOS
     {
-        const char* docs = iOSGetDocumentsDir();
-        if ( docs != NULL ) {
-            char dp[ 1024 ]; snprintf( dp, sizeof(dp), "%s/srr2_ctx.txt", docs );
-            FILE* f = fopen( dp, "w" );
-            if ( f != NULL ) { fprintf( f, "context=%d gameState=%u\n", currentContext, inputGameState ); fclose( f ); }
+        static int lastContext = -1;
+        static unsigned lastInputState = ~0u;
+        if (currentContext != lastContext || inputGameState != lastInputState) {
+            const char* name = "other";
+            switch (currentContext) {
+                case CONTEXT_ENTRY: name = "entry"; break;
+                case CONTEXT_BOOTUP: name = "bootup"; break;
+                case CONTEXT_FRONTEND: name = "frontend"; break;
+                case CONTEXT_LOADING_GAMEPLAY: name = "loading-gameplay"; break;
+                case CONTEXT_GAMEPLAY: name = "gameplay"; break;
+                case CONTEXT_PAUSE: name = "pause"; break;
+                default: break;
+            }
+            if (getenv("IOS_ATTRIB_PROBE"))
+                fprintf(stderr, "IOS_GAME_STATE context=%d name=%s inputState=%u uptime_ms=%u\n", currentContext, name, inputGameState, radTimeGetMilliseconds());
+            const char* docs = iOSGetDocumentsDir();
+            if ( docs != NULL ) {
+                char dp[ 1024 ]; snprintf( dp, sizeof(dp), "%s/srr2_ctx.txt", docs );
+                FILE* f = fopen( dp, "w" );
+                if ( f != NULL ) { fprintf( f, "context=%d gameState=%u\n", currentContext, inputGameState ); fclose( f ); }
+            }
+            lastContext = currentContext;
+            lastInputState = inputGameState;
         }
     }
 #endif
@@ -990,6 +1011,33 @@ void Game::Run()
         //
         DEMOPROFILE( g_DemoProfiler.Start(PROFILE_CHANNEL_LOAD); )
         p3d::loadManager->SwitchTask();
+#ifdef RAD_IOS
+        // File streams yield at async reads/seeks. Advancing only once per
+        // displayed frame makes a loading screen's refresh rate throttle IO.
+        // Give boot and level loading a bounded additional budget; updates and
+        // rendering still run once per frame.
+        const ContextEnum loadingContext = mpGameFlow->GetCurrentContext();
+        const bool loadingScreen = loadingContext == CONTEXT_BOOTUP ||
+                                   loadingContext == CONTEXT_LOADING_GAMEPLAY;
+        const bool streamingWorld = (loadingContext == CONTEXT_GAMEPLAY ||
+                                     loadingContext == CONTEXT_PAUSE) &&
+                                    GetLoadingManager()->IsLoading();
+        if (loadingScreen || streamingWorld)
+        {
+            // Continue servicing streamed regions after gameplay begins,
+            // with a smaller budget so movement/rendering remain responsive.
+            const unsigned passLimit = loadingScreen ? 8 : 4;
+            const unsigned timeBudget = loadingScreen ? 4 : 2;
+            const unsigned loadBudgetStart = radTimeGetMilliseconds();
+            for (unsigned pass = 0; pass < passLimit &&
+                 radTimeGetMilliseconds() - loadBudgetStart < timeBudget &&
+                 mpGameFlow->GetCurrentContext() == loadingContext; ++pass)
+            {
+                ::radFileService();
+                p3d::loadManager->SwitchTask();
+            }
+        }
+#endif
         DEMOPROFILE( g_DemoProfiler.Stop(PROFILE_CHANNEL_LOAD); )
 
         ++mFrameCount;

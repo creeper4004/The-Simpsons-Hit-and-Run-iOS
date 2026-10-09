@@ -155,10 +155,12 @@ static radMemoryAllocator g_ControllerSystemAllocator = RADMEMORY_ALLOC_DEFAULT;
 
 
 
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 // Es decir el touch entrará como mando principal respetando la estructura del juego de puertos, en este caso puerto 0
 static const char* ANDROID_TOUCH_CONTROLLER_LOCATION = "Port0\\Slot0";
+#endif
 
+#if defined(RAD_ANDROID)
 typedef bool (*AndroidRumblePolicyCallback)();
 
 static AndroidRumblePolicyCallback sAndroidRumblePolicyCallback = NULL;
@@ -951,7 +953,7 @@ class radControllerInputPointSDL
     ref< IRadObjectList > m_xIOl_Callbacks;
 };
 
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 
 //============================================================================
 // Component: radControllerInputPointAndroidTouch
@@ -1976,7 +1978,7 @@ else
     uint16_t                          m_LeftGain, m_RightGain;
 };
 
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 
 //============================================================================
 // Component: radControllerAndroidTouch
@@ -2676,7 +2678,7 @@ class radControllerSystemSDL
             return pPhysicalController;
         }
 
-    #if defined(RAD_ANDROID)
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
         /*
         * Android touch fallback:
         *
@@ -2922,7 +2924,7 @@ class radControllerSystemSDL
         //
         ::radObjectListCreate( & m_xIOl_Callbacks, g_ControllerSystemAllocator );
         rAssert( m_xIOl_Callbacks != NULL );
-        #if defined(RAD_ANDROID)
+        #if defined(RAD_ANDROID) || defined(RAD_IOS)
         {
             unsigned int virtualTime = radTimeGetMilliseconds() + m_VirtualTimeAdjust;
             unsigned int pollingRate = 10;
@@ -3070,7 +3072,7 @@ class radControllerSystemSDL
     ref< IRadObjectList >     m_xIOl_Controllers;
     ref< IRadTimer >          m_xITimer;
     ref< IRadTimerList >      m_xITimerList;
-    #if defined(RAD_ANDROID)
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     ref< IRadControllerSDL > m_xIAndroidTouchController;
     #endif
 
@@ -3136,5 +3138,4 @@ void radControllerSystemService( void )
         s_pTheSDLControllerSystem2->Service( );
     }
 }
-
 

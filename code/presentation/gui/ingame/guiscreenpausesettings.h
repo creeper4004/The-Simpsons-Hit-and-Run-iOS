@@ -63,12 +63,13 @@ private:
     {
         MENU_ITEM_CAMERA,
         MENU_ITEM_JUMP_CAMERAS,
-    #if !defined(RAD_PC) //&& !defined(RAD_ANDROID)// he encontrado que como estamos usando en android los assets de pc, pues claro no encontramos esta opcion es lógico
+    // iOS uses the PC pause-screen assets, which omit these console rows.
+    #if !defined(RAD_PC) && !defined(RAD_IOS)
         MENU_ITEM_INVERT_CAM_CONTROL,
     #endif
         MENU_ITEM_INTERSECT_NAV_SYSTEM,
         MENU_ITEM_RADAR,
-    #if !defined(RAD_PC) //&& !defined(RAD_ANDROID) // temporalmente desactivado la opcion del menu vibracion en android
+    #if !defined(RAD_PC) && !defined(RAD_IOS)
         MENU_ITEM_VIBRATION,
     #endif
         #if !defined(RAD_ANDROID)

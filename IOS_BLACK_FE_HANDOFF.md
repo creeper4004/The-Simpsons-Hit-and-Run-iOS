@@ -1,5 +1,20 @@
 # iOS FE Black Screen — Handoff Summary
 
+## 2026-10-08 update
+
+Legal artwork and the complete living-room menu render in live captures, with
+the menu also confirmed by the user on the phone. Touch buttons now render after
+the OpenGL-to-Metal depth conversion. A New Game buffer-deletion crash and missing
+iOS virtual-controller integration are repaired. Touch movement and restored
+ground/buildings are confirmed on the phone and simulator. The retained mesh
+upload now preserves the populated vertex count across attribute/index locks.
+Pause Settings asset-row mismatch is repaired and confirmed by the user.
+Latest phone menu uptime is 9.8 s and New Game loading is 17.9 s, compared with
+about 79–88 s in earlier level-loading runs. A HUD map placement defect is in
+live verification. Read the latest
+`IOS_MGL_RENDER_HANDOFF.md` update and the capture
+README before following the historical notes. CoreSimulator permissions work.
+
 ## 2026-09-26 update — frame presents, but loaded artwork is malformed
 
 The current iOS Debug build runs on the iPhone 17 simulator and completes the

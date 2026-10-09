@@ -157,7 +157,7 @@ public:
     static void UpdateNumCoinsDisplay( int numCoins, bool show = true );
     void AbortFade();
 
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     void ApplyAndroidHudMapLayout();
     #endif
 
@@ -180,11 +180,11 @@ private:
     void UpdateHudMapPosition( unsigned int elapsedTime );
 #endif
 
-#if defined(SRR2_MOVABLE_HUD_MAP) || defined(RAD_ANDROID)
+#if defined(SRR2_MOVABLE_HUD_MAP) || defined(RAD_ANDROID) || defined(RAD_IOS)
     void MoveHudMap( int x, int y );
 #endif
 
-#ifdef RAD_ANDROID
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
     
     bool m_androidHudMapLayoutInitialized;
     bool m_androidHudMapTouchLayoutActive;

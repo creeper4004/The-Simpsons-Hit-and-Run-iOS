@@ -207,7 +207,7 @@ pglContext::pglContext(pglDevice* dev, pglDisplay* disp) : pddiBaseContext((pddi
         "uniform vec4 ecm;\n"
         "uniform float srm;\n"
 
-        #ifdef RAD_ANDROID
+        #if defined(RAD_ANDROID) || defined(RAD_IOS)
         // Indica si el material debe recibir iluminación.
         "uniform int lit;\n"
         #endif
@@ -224,7 +224,7 @@ pglContext::pglContext(pglDevice* dev, pglDisplay* disp) : pddiBaseContext((pddi
                 "    vec4 V = modelview * vec4(position, 1.0);\n"
                  
 
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
             "    vec3 diff;\n"
     #else
             "    vec3 n = normalize(mat3(normalmatrix) * normal);\n"
@@ -233,7 +233,7 @@ pglContext::pglContext(pglDevice* dev, pglDisplay* disp) : pddiBaseContext((pddi
 
             "    vec3 spec = vec3(0.0);\n"
 
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
             // Los materiales no iluminados deben conservar directamente
             // el color del vértice, sin luz ambiental, difusa o especular.
             "    if (lit == 0) {\n"
@@ -258,7 +258,7 @@ pglContext::pglContext(pglDevice* dev, pglDisplay* disp) : pddiBaseContext((pddi
             "            spec += att * f * power(product(n,h),srm) * scm.rgb * lights[i].colour.rgb;\n"
             "        }\n"
 
-        #ifdef RAD_ANDROID
+        #if defined(RAD_ANDROID) || defined(RAD_IOS)
                 "    }\n"
         #endif
 
@@ -583,11 +583,9 @@ void pglContext::EndPrims(pddiPrimStream* stream)
     // zero-filled buffer so all four attribs are always enabled.
     {
         static GLuint sClientVBO = 0;
-        static size_t sClientCap = 0;
         if (sClientVBO == 0)
         {
             glGenBuffers(1, &sClientVBO);
-            sClientCap = 0;
         }
         size_t vcount = glstream->coords.size();
         if (vcount == 0) vcount = 1;
@@ -628,12 +626,11 @@ void pglContext::EndPrims(pddiPrimStream* stream)
             if (lsrc) memcpy(dst + 32, lsrc, 4);
         }
         glBindBuffer(GL_ARRAY_BUFFER, sClientVBO);
-        if (total > sClientCap)
-        {
-            sClientCap = total;
-            glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)sClientCap, NULL, GL_STREAM_DRAW);
-        }
-        glBufferSubData(GL_ARRAY_BUFFER, 0, total, interleaved.data());
+        // Orphan for each draw. Metal executes asynchronously; overwriting
+        // the previous shared buffer makes earlier draws read later vertices.
+        // Exact sizing keeps small UI quads on Metal's copied set*Bytes path
+        // after a large mesh has passed through this stream.
+        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)total, interleaved.data(), GL_STREAM_DRAW);
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, (GLsizei)kVStride, (const void*)0);
         glEnableVertexAttribArray(1);
@@ -881,6 +878,7 @@ pglPrimBuffer::pglPrimBuffer(pglContext* c, pddiPrimType type, unsigned vertexFo
     stream = new pglPrimBufferStream(this);
 
     total = allocated = stride = nStrips = 0;
+    populatedVertices = 0;
     coord = normal = uv = NULL;
     colour = NULL;
     strips = NULL;
@@ -956,6 +954,12 @@ pddiPrimBufferStream* pglPrimBuffer::Lock()
 
 void pglPrimBuffer::Unlock(pddiPrimBufferStream* stream)
 {
+    // Mesh loaders lock separately for positions, normals, UVs, colours and
+    // indices. An index-only lock writes no vertices; retain the high-water
+    // count instead of treating that lock's cursor as the mesh size.
+    if (total > populatedVertices)
+        populatedVertices = total;
+
     if(coord)
         coord = (float*)((char*)coord - total * stride);
 
@@ -989,26 +993,6 @@ void pglPrimBuffer::SetIndices(unsigned short* i, int count)
     valid = false;
 }
 
-#if defined(RAD_IOS)
-// MGL (OpenGL-on-Metal) materializes every enabled attrib as a real Metal
-// vertex buffer and asserts enabled-inputs == program-declared-inputs
-// (mapGLBuffersToMTLBufferMap: mapped_buffers == count). GLES semantics allow
-// a mesh to omit arrays the shader declares (constant 0). Feed those attrib
-// slots a shared zero buffer so all four program inputs always resolve.
-static GLuint sZeroVBO(void)
-{
-    static GLuint vbo = 0;
-    if (!vbo)
-    {
-        static const float zeros[16] = {0};
-        glGenBuffers(1, &vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(zeros), zeros, GL_STATIC_DRAW);
-    }
-    return vbo;
-}
-#endif
-
 void pglPrimBuffer::Display(void)
 {
     MICROPROFILE_SCOPEI("PDDI", "pglPrimBuffer::Display", MP_RED);
@@ -1022,7 +1006,26 @@ void pglPrimBuffer::Display(void)
         if(!vertexBuffer)
             glGenBuffers(1, &vertexBuffer);
         glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+#if defined(RAD_IOS)
+        // Use the same complete 36-byte layout as immediate draws. A missing
+        // normal must not switch GL_ARRAY_BUFFER underneath later UV/color
+        // pointers. Also, GL stride 0 means tightly packed, not a constant:
+        // a one-element fallback buffer is out of bounds after vertex zero.
+        const GLsizei uploadStride = 36;
+        std::vector<unsigned char> vertices((size_t)allocated * uploadStride, 0);
+        for (unsigned v = 0; v < populatedVertices; ++v)
+        {
+            unsigned char* dst = vertices.data() + (size_t)v * uploadStride;
+            if (coord) memcpy(dst, (const char*)coord + (size_t)v * stride, 12);
+            if (normal) memcpy(dst + 12, (const char*)normal + (size_t)v * stride, 12);
+            if (uv) memcpy(dst + 24, (const char*)uv + (size_t)v * stride, 8);
+            if (colour) memcpy(dst + 32, colour + (size_t)v * stride, 4);
+            else memset(dst + 32, 255, 4);
+        }
+        glBufferData(GL_ARRAY_BUFFER, vertices.size(), vertices.data(), GL_STATIC_DRAW);
+#else
         glBufferData(GL_ARRAY_BUFFER, mem, buffer, GL_STATIC_DRAW);
+#endif
 
         if(indexCount && indices)
         {
@@ -1036,6 +1039,17 @@ void pglPrimBuffer::Display(void)
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
         }
 
+#if defined(RAD_IOS)
+        const GLint sizes[] = {3, 3, 2, 4};
+        const size_t offsets[] = {0, 12, 24, 32};
+        for (GLuint a = 0; a < 4; ++a)
+        {
+            glEnableVertexAttribArray(a);
+            glVertexAttribPointer(a, sizes[a], a == 3 ? GL_UNSIGNED_BYTE : GL_FLOAT,
+                                  a == 3 ? GL_TRUE : GL_FALSE, uploadStride,
+                                  (const void*)offsets[a]);
+        }
+#else
         GLintptr offset = 0;
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,stride,(void*)offset);
@@ -1047,22 +1061,11 @@ void pglPrimBuffer::Display(void)
             glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,stride,(void*)offset);
             offset += 12;
         }
-#if defined(RAD_IOS)
-        else
-        {
-            // MGL needs a real buffer behind every program input (see
-            // sZeroVBO). stride 0 -> every vertex reads the same zeros.
-            glEnableVertexAttribArray(1);
-            glBindBuffer(GL_ARRAY_BUFFER, sZeroVBO());
-            glVertexAttribPointer(1,3,GL_FLOAT,GL_FALSE,0,(void*)0);
-        }
-#else
         else
         {
             glDisableVertexAttribArray(1);
             glVertexAttrib3f(1, 0.0f, 0.0f, 0.0f);
         }
-#endif
 
         if(vertexType & 0xf)
         {
@@ -1070,20 +1073,11 @@ void pglPrimBuffer::Display(void)
             glVertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,stride,(void*)offset);
             offset += 8;
         }
-#if defined(RAD_IOS)
-        else
-        {
-            glEnableVertexAttribArray(2);
-            glBindBuffer(GL_ARRAY_BUFFER, sZeroVBO());
-            glVertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,0,(void*)0);
-        }
-#else
         else
         {
             glDisableVertexAttribArray(2);
             glVertexAttrib2f(2, 0.0f, 0.0f);
         }
-#endif
 
         if(vertexType & PDDI_V_COLOUR)
         {
@@ -1091,14 +1085,6 @@ void pglPrimBuffer::Display(void)
             glVertexAttribPointer(3,4,GL_UNSIGNED_BYTE,GL_TRUE,stride,(void*)offset);
             offset += 4;
         }
-#if defined(RAD_IOS)
-        else
-        {
-            glEnableVertexAttribArray(3);
-            glBindBuffer(GL_ARRAY_BUFFER, sZeroVBO());
-            glVertexAttribPointer(3,4,GL_UNSIGNED_BYTE,GL_TRUE,0,(void*)0);
-        }
-#else
         else
         {
             glDisableVertexAttribArray(3);
@@ -1121,7 +1107,7 @@ void pglPrimBuffer::Display(void)
     }
     else
     {
-        glDrawArrays(primTypeTable[primType], 0, total);
+        glDrawArrays(primTypeTable[primType], 0, populatedVertices);
     }
 }
 

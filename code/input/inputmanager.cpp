@@ -49,10 +49,12 @@
 #endif
 
 
-#ifdef RAD_ANDROID
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 #include <input/touch/touchcameracontroller.h>
 #include <input/touch/touchinputadapter.h>
 #include <input/touch/touchinputmodemanager.h>
+#endif
+#ifdef RAD_ANDROID
 #include <data/config/androidconfigurationmanager.h>
 extern "C" void radControllerSDLSetAndroidRumblePolicyCallback( bool (*callback)() );
 extern "C" void radControllerSDLSetAndroidGamepadCandidateConnectedCallback(void (*callback)(int));
@@ -559,7 +561,7 @@ MEMTRACK_PUSH_GROUP( "InputManager" );
         // preallocate run time controller structure.
         mControllerArray[ i ].Create(i);
     }
-    #if defined(__ANDROID__)
+    #if defined(__ANDROID__) || defined(RAD_IOS)
             /*
         * Android touch input is injected into controller 0 as virtual input.
         *
@@ -604,7 +606,7 @@ void InputManager::Update( unsigned int timeinms )
         #endif
     }
 
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     TouchCameraController::GetInstance().Update( timeinms );
     TouchInputAdapter::GetInstance().FlushQueuedInputs();
     #endif
@@ -1210,5 +1212,3 @@ void InputManager::StopRumbleEffects()
 }
 
 #endif
-
-

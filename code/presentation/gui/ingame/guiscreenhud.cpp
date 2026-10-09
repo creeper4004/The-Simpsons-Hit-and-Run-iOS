@@ -68,7 +68,7 @@
 #include <Screen.h>
 #include <Sprite.h>
 
-#ifdef RAD_ANDROID
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 #include <input/touch/touchinputmodemanager.h>
 #endif
 //===========================================================================
@@ -99,7 +99,7 @@ const unsigned int MIN_AVATAR_OFF_ROAD_TIME = 0; // in msec
 const unsigned int MESSAGE_DISPLAY_TIME = 3000; // in msec
 const unsigned int MESSAGE_TRANSITION_TIME = 200; // in msec
 
-#ifdef RAD_ANDROID
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 const int ANDROID_TOUCH_HUD_MAP_OFFSET_X=100;
 const int ANDROID_TOUCH_HUD_MAP_OFFSET_Y=290;
 #endif
@@ -216,7 +216,7 @@ MEMTRACK_PUSH_GROUP( "CGUIScreenHud" );
 
     int i = 0;
 
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     m_androidHudMapLayoutInitialized = false;
     m_androidHudMapTouchLayoutActive = false;
     #endif
@@ -353,7 +353,7 @@ MEMTRACK_PUSH_GROUP( "CGUIScreenHud" );
     m_overlays[ HUD_MAP ]->ResetTransformation();
     m_overlays[ HUD_MAP ]->ScaleAboutCenter( RADAR_SCALE );
 
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     ApplyAndroidHudMapLayout();
     #endif
 
@@ -762,7 +762,7 @@ void CGuiScreenHud::HandleMessage
 //===========================================================================
 void CGuiScreenHud::Update( unsigned int elapsedTime )
 {
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     ApplyAndroidHudMapLayout();
     #endif
     if( m_state == GUI_WINDOW_STATE_RUNNING )
@@ -2075,13 +2075,13 @@ CGuiScreenHud::UpdateHudMapPosition( unsigned int elapsedTime )
 }
 #endif
 
-#if defined(SRR2_MOVABLE_HUD_MAP) || defined(RAD_ANDROID)
+#if defined(SRR2_MOVABLE_HUD_MAP) || defined(RAD_ANDROID) || defined(RAD_IOS)
 void
 CGuiScreenHud::MoveHudMap( int x, int y )
 {
     rAssert( m_hudMap[ 0 ] );
 
-#ifndef RAD_ANDROID
+#if !defined(RAD_ANDROID) && !defined(RAD_IOS)
     // Original desktop/debug behaviour:
     // clamp HUD map within screen boundaries.
     //
@@ -2123,14 +2123,20 @@ void CGuiScreenHud::AbortFade()
 }
 
 
-#ifdef RAD_ANDROID
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 
 void CGuiScreenHud::ApplyAndroidHudMapLayout()
 {
     rAssert( m_overlays[ HUD_MAP ] != NULL );
 
+#ifdef RAD_IOS
+    // Keep the radar clear of the driving controls, including when a
+    // connected controller temporarily changes the active input mode.
+    const bool useTouchHudMapLayout = true;
+#else
     const bool useTouchHudMapLayout =
             TouchInputModeManager::GetInstance().IsTouchMode();
+#endif
 
     if( m_androidHudMapLayoutInitialized &&
         m_androidHudMapTouchLayoutActive == useTouchHudMapLayout )
