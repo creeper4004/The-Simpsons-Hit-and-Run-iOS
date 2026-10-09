@@ -36,6 +36,11 @@
 #endif
 
 #include <string.h>
+#ifdef RAD_IOS
+#include <stdio.h>
+#include <stdlib.h>
+extern "C" void iOSRuntimeLog( const char* subsystem, const char* message );
+#endif
 
 // Static pointer to instance of singleton.
 MemoryCardManager* MemoryCardManager::spInstance = NULL;
@@ -878,6 +883,25 @@ MemoryCardManager::OnDriveOperationsComplete( void* pUserData )
             // done opening all save game drives
             //
             m_currentState = STATE_READY;
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
+            // Mobile builds use the SDL default drive as their writable app
+            // storage. They skip the console memory-card picker, so select
+            // that single drive once it has opened.
+            if( NUM_SAVE_GAME_DRIVES > 0 && m_currentDrive == NULL )
+            {
+                this->SetCurrentDrive( static_cast<unsigned int>( 0 ) );
+            }
+#ifdef RAD_IOS
+            if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+            {
+                char trace[ 160 ];
+                snprintf( trace, sizeof( trace ), "drives opened=%u current=%s",
+                          m_numDrivesOpened,
+                          m_currentDrive != NULL ? m_currentDrive->GetDriveName() : "(null)" );
+                iOSRuntimeLog( "save-drive", trace );
+            }
+#endif
+#endif
         }
     }
     else // checking memory cards during bootup

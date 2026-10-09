@@ -18,6 +18,11 @@
 // Includes
 //===========================================================================
 #include <presentation/gui/ingame/guiscreenhud.h>
+#ifdef RAD_IOS
+#include <stdio.h>
+#include <stdlib.h>
+extern "C" void iOSRuntimeLog( const char* subsystem, const char* message );
+#endif
 #include <presentation/gui/ingame/guihudtextbox.h>
 #include <presentation/gui/ingame/hudevents/hudcardcollected.h>
 #include <presentation/gui/ingame/hudevents/hudcoincollected.h>
@@ -545,6 +550,17 @@ void CGuiScreenHud::HandleMessage
             //
             m_overlays[ param1 ]->SetVisible( message == GUI_MSG_SHOW_HUD_OVERLAY );
             m_elapsedTime[ param1 ] = 0;
+#ifdef RAD_IOS
+            if( param1 == HUD_MAP && getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+            {
+                char trace[ 128 ];
+                snprintf( trace, sizeof( trace ), "HUD_MAP command=%s visible=%d alpha=%.3f",
+                          message == GUI_MSG_SHOW_HUD_OVERLAY ? "show" : "hide",
+                          m_overlays[ param1 ]->IsVisible() ? 1 : 0,
+                          m_overlays[ param1 ]->GetAlpha() );
+                iOSRuntimeLog( "hud-overlay", trace );
+            }
+#endif
 
             rAssertMsg( param1 != HUD_MESSAGE, "Call CGuiScreenHud::DisplayMessage() instead!" );
 

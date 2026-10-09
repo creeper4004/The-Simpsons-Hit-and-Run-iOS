@@ -93,9 +93,8 @@ TouchProfile TouchContextResolver::Resolve() const
 
     if
     (
-        mContextArea == TOUCH_CONTEXT_AREA_GAMEPLAY &&
-        currentContext != CONTEXT_SUPERSPRINT &&
-        currentContext != CONTEXT_SUPERSPRINT_FE
+        currentContext == CONTEXT_GAMEPLAY &&
+        mContextArea == TOUCH_CONTEXT_AREA_GAMEPLAY
     )
     {
         resolveCase = TOUCH_CONTEXT_AREA_GAMEPLAY;

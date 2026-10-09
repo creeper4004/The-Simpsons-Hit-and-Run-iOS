@@ -73,6 +73,7 @@
 #include <stdio.h>
 extern "C" const char* iOSGetDocumentsDir(void);
 extern "C" void iOSProgress(const char* stage);
+extern "C" void iOSRuntimeLog(const char* subsystem, const char* message);
 #endif
 #ifdef RAD_ANDROID
 #include <data/config/androidconfigurationmanager.h>
@@ -173,6 +174,22 @@ static void UpdateTouchContextResolverFromGame()
         inputGameState,
         avatarInVehicle
     );
+#ifdef RAD_IOS
+    static int lastLoggedContext = -1;
+    static int lastLoggedVehicle = -1;
+    const int vehicleState = avatarInVehicle ? 1 : 0;
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL &&
+        (currentContext != lastLoggedContext ||
+         vehicleState != lastLoggedVehicle) )
+    {
+        char trace[ 160 ];
+        snprintf( trace, sizeof( trace ), "context=%d inputState=%u vehicle=%d",
+                  currentContext, inputGameState, vehicleState );
+        iOSRuntimeLog( "touch-context", trace );
+        lastLoggedContext = currentContext;
+        lastLoggedVehicle = vehicleState;
+    }
+#endif
 }
 
 static void UpdateTouchHudSystemFromSDLEvent( const SDL_Event& msg )

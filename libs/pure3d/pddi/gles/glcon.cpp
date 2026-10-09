@@ -17,6 +17,11 @@
 #include <vector>
 
 #include <microprofile.h>
+#ifdef RAD_IOS
+#include <stdio.h>
+#include <stdlib.h>
+extern "C" void iOSRuntimeLog( const char* subsystem, const char* message );
+#endif
 
 // vertex arrays rendering
 GLenum primTypeTable[5] =
@@ -465,6 +470,26 @@ void pglContext::SetScissor(pddiRect* rect)
     {
         glScissor(rect->left, display->GetHeight() - rect->bottom, rect->right - rect->left, rect->bottom - rect->top);
         glEnable(GL_SCISSOR_TEST);
+#ifdef RAD_IOS
+        static int lastLeft = -1, lastTop = -1, lastRight = -1, lastBottom = -1;
+        if( getenv( "IOS_RUNTIME_DIAG" ) != NULL &&
+            (rect->left != lastLeft || rect->top != lastTop ||
+             rect->right != lastRight || rect->bottom != lastBottom) )
+        {
+            char trace[ 160 ];
+            snprintf( trace, sizeof( trace ),
+                      "scissor GL=(%d,%d %dx%d) logical=(%d,%d,%d,%d) displayHeight=%d",
+                      rect->left, display->GetHeight() - rect->bottom,
+                      rect->right - rect->left, rect->bottom - rect->top,
+                      rect->left, rect->top, rect->right, rect->bottom,
+                      display->GetHeight() );
+            iOSRuntimeLog( "pddi-scissor", trace );
+            lastLeft = rect->left;
+            lastTop = rect->top;
+            lastRight = rect->right;
+            lastBottom = rect->bottom;
+        }
+#endif
     }
 }
 
@@ -1195,11 +1220,30 @@ void pglContext::SetColourWrite( bool red, bool green, bool blue, bool alpha )
 {
     pddiBaseContext::SetColourWrite(red, green, blue, alpha);
     glColorMask(red, green, blue, alpha);
+#ifdef RAD_IOS
+    static int lastMask = -1;
+    const int mask = (red ? 8 : 0) | (green ? 4 : 0) | (blue ? 2 : 0) | (alpha ? 1 : 0);
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL && mask != lastMask )
+    {
+        char trace[ 64 ];
+        snprintf( trace, sizeof( trace ), "color-write mask=0x%x", mask );
+        iOSRuntimeLog( "pddi-state", trace );
+        lastMask = mask;
+    }
+#endif
 }
 
 void pglContext::EnableZBuffer(bool enable)
 {
     pddiBaseContext::EnableZBuffer(enable);
+#ifdef RAD_IOS
+    static int lastEnabled = -1;
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL && static_cast<int>( enable ) != lastEnabled )
+    {
+        iOSRuntimeLog( "pddi-state", enable ? "depth-test=on" : "depth-test=off" );
+        lastEnabled = enable ? 1 : 0;
+    }
+#endif
     if(enable)
     {
         glEnable(GL_DEPTH_TEST);
@@ -1221,6 +1265,14 @@ void pglContext::SetZWrite(bool b)
 {
     pddiBaseContext::SetZWrite(b);
     glDepthMask(b);
+#ifdef RAD_IOS
+    static int lastEnabled = -1;
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL && static_cast<int>( b ) != lastEnabled )
+    {
+        iOSRuntimeLog( "pddi-state", b ? "depth-write=on" : "depth-write=off" );
+        lastEnabled = b ? 1 : 0;
+    }
+#endif
 }
 
 void pglContext::SetZBias(float bias)
@@ -1248,6 +1300,14 @@ GLenum stencilTable[6] = {
 void pglContext::EnableStencilBuffer(bool enable)
 {
     pddiBaseContext::EnableStencilBuffer(enable);
+#ifdef RAD_IOS
+    static int lastEnabled = -1;
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL && static_cast<int>( enable ) != lastEnabled )
+    {
+        iOSRuntimeLog( "pddi-state", enable ? "stencil-test=on" : "stencil-test=off" );
+        lastEnabled = enable ? 1 : 0;
+    }
+#endif
     if(enable)
         glEnable(GL_STENCIL_TEST);
     else
@@ -1372,6 +1432,26 @@ void pglContext::SetShaderProgram(pglProgram* program)
 
 void pglContext::SetTextureEnvironment(const pglTextureEnv* texEnv)
 {
+#ifdef RAD_IOS
+    static int lastBlendMode = -1;
+    static int lastAlphaTest = -1;
+    static int lastAlphaRefMilli = -1;
+    const int alphaRefMilli = static_cast<int>( texEnv->alphaRef * 1000.0f );
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL &&
+        (static_cast<int>( texEnv->alphaBlendMode ) != lastBlendMode ||
+         static_cast<int>( texEnv->alphaTest ) != lastAlphaTest ||
+         alphaRefMilli != lastAlphaRefMilli) )
+    {
+        char trace[ 128 ];
+        snprintf( trace, sizeof( trace ), "material alpha blendMode=%d test=%d ref=%d/1000",
+                  static_cast<int>( texEnv->alphaBlendMode ),
+                  texEnv->alphaTest ? 1 : 0, alphaRefMilli );
+        iOSRuntimeLog( "pddi-alpha", trace );
+        lastBlendMode = static_cast<int>( texEnv->alphaBlendMode );
+        lastAlphaTest = texEnv->alphaTest ? 1 : 0;
+        lastAlphaRefMilli = alphaRefMilli;
+    }
+#endif
     if(texEnv->texture)
         SetShaderProgram(texEnv->alphaTest ? alphaTestProgram : textureProgram);
     else

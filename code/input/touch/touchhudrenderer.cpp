@@ -1,4 +1,7 @@
 #include <input/touch/touchhudrenderer.h>
+#ifdef RAD_IOS
+extern "C" void iOSRuntimeLog( const char*, const char* );
+#endif
 #include <input/touch/touchassetmanager.h>
 #include <input/touch/touchhudsystem.h>
 #include <input/touch/touchinputmodemanager.h>
@@ -156,6 +159,26 @@ float TouchHudRenderer::GetPressedOpacity() const
 void TouchHudRenderer::Render()
 {
 #if defined(RAD_IOS)
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+    {
+        static int previousGateState = -1;
+        const int gateState = (mInitialized ? 1 : 0) |
+                              (mEnabled ? 2 : 0) |
+                              (TouchHudSystem::GetInstance().IsEnabled() ? 4 : 0) |
+                              (TouchInputModeManager::GetInstance().ShouldShowTouchHud() ? 8 : 0);
+        if( gateState != previousGateState )
+        {
+            char trace[ 128 ];
+            snprintf( trace, sizeof( trace ),
+                      "HUD gates initialized=%d rendererEnabled=%d systemEnabled=%d modeAllows=%d",
+                      mInitialized ? 1 : 0, mEnabled ? 1 : 0,
+                      TouchHudSystem::GetInstance().IsEnabled() ? 1 : 0,
+                      TouchInputModeManager::GetInstance().ShouldShowTouchHud() ? 1 : 0 );
+            iOSRuntimeLog( "touch-hud", trace );
+            previousGateState = gateState;
+        }
+    }
+
     // Diag: registrar que gate impide dibujar el HUD.
     static time_t lastDiagnostic = 0;
     const time_t now = time( NULL );
@@ -230,6 +253,20 @@ void TouchHudRenderer::Render()
     }
 
     const TouchProfile currentProfile = hudSystem.GetCurrentProfile();
+#if defined(RAD_IOS)
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+    {
+        static int previousProfile = -1;
+        if( static_cast<int>( currentProfile ) != previousProfile )
+        {
+            char trace[ 80 ];
+            snprintf( trace, sizeof( trace ), "resolved touch profile=%d",
+                      static_cast<int>( currentProfile ) );
+            iOSRuntimeLog( "touch-hud", trace );
+            previousProfile = static_cast<int>( currentProfile );
+        }
+    }
+#endif
 
     if ( currentProfile == TOUCH_PROFILE_HIDDEN )
     {

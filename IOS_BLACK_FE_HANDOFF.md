@@ -1,5 +1,16 @@
 # iOS FE Black Screen — Handoff Summary
 
+## 2026-10-09 status
+
+The save path now selects the iOS writable SDL drive and has passed two
+simulator write/commit/readback checks. This proves file persistence; the
+save-menu touch navigation still needs a live UI repro. Bounded opt-in save and
+render diagnostics are documented in `IOS_RUNTIME_DIAGNOSTICS.md`. The user's
+latest screenshots still show black panel regions and 3D characters covering
+menu text; these visual defects remain open. See the latest status at the top
+of `IOS_MGL_RENDER_HANDOFF.md`. The current diagnostic build was not installed
+or launched on the physical phone.
+
 ## 2026-10-08 update
 
 Legal artwork and the complete living-room menu render in live captures, with

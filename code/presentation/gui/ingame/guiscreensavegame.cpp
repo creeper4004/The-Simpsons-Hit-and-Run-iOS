@@ -16,6 +16,11 @@
 // Includes
 //===========================================================================
 #include <presentation/gui/ingame/guiscreensavegame.h>
+#ifdef RAD_IOS
+#include <stdio.h>
+#include <stdlib.h>
+extern "C" void iOSRuntimeLog( const char* subsystem, const char* message );
+#endif
 #include <presentation/gui/guimanager.h>
 #include <presentation/gui/guimenu.h> 
 #include <presentation/gui/guitextbible.h>
@@ -387,6 +392,10 @@ void CGuiScreenSaveGame::HandleMessage
 
             case PROMPT_SAVE_SUCCESSFUL:
             {
+#ifdef RAD_IOS
+                if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+                    iOSRuntimeLog( "save-ui", "success prompt continued; returning to parent pause screen" );
+#endif
                 m_pParent->HandleMessage( GUI_MSG_ON_SAVE_GAME_COMPLETE );
 
                 break;
@@ -426,6 +435,15 @@ void CGuiScreenSaveGame::HandleMessage
             case GUI_MSG_MENU_SELECTION_MADE:
             {
                 m_currentSlot = param1; //  // param1 = slot
+#ifdef RAD_IOS
+                if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+                {
+                    char trace[ 80 ];
+                    snprintf( trace, sizeof( trace ), "slot selected=%u operation=save",
+                              static_cast<unsigned int>( param1 ) );
+                    iOSRuntimeLog( "save-ui", trace );
+                }
+#endif
 
                 SaveGameInfo saveGameInfo;
                 bool corrupt = false;
@@ -521,6 +539,15 @@ void CGuiScreenSaveGame::HandleMessage
 void
 CGuiScreenSaveGame::OnSaveGameComplete( radFileError errorCode )
 {
+#ifdef RAD_IOS
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+    {
+        char trace[ 96 ];
+        snprintf( trace, sizeof( trace ), "save callback error=%d slot=%d",
+                  static_cast<int>( errorCode ), m_currentSlot );
+        iOSRuntimeLog( "save-ui", trace );
+    }
+#endif
     m_lastError = errorCode;
     m_StatusPromptShown = true;
 

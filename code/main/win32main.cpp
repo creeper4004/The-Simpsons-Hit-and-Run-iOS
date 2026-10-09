@@ -31,6 +31,8 @@
 // iOS: el CWD por defecto de SDL2 es el resourcePath del bundle (solo lectura).
 // El motor lee el contenido del juego relativo al CWD, asi que cambiamos al
 // directorio Documents/ (escribible, donde el jugador coloca los assets).
+#include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 #endif
 
@@ -127,6 +129,53 @@ extern "C" void iOSProgress(const char* stage)
     // Also surface to the console so `simctl launch --console` shows it.
     fprintf( stderr, "[SRR2] %s\n", stage );
     fflush( stderr );
+}
+
+// Opt-in runtime trace for simulator/device repros. Set
+// IOS_RUNTIME_DIAG=1 in the launched process to capture bounded save and
+// render-state events in Documents/srr2_runtime_diag.txt.
+extern "C" void iOSRuntimeLog(const char* subsystem, const char* message)
+{
+    const char* enabled = getenv( "IOS_RUNTIME_DIAG" );
+    if( enabled == NULL || strcmp( enabled, "1" ) != 0 ) {
+        return;
+    }
+
+    static unsigned int lineCount = 0;
+    static unsigned int pddiStateLineCount = 0;
+    static unsigned int pddiAlphaLineCount = 0;
+    static unsigned int pddiScissorLineCount = 0;
+    static unsigned int touchContextLineCount = 0;
+    if( lineCount >= 4000 ) {
+        return;
+    }
+
+    if( subsystem != NULL && strcmp( subsystem, "pddi-state" ) == 0 && pddiStateLineCount++ >= 240 )
+        return;
+    if( subsystem != NULL && strcmp( subsystem, "pddi-alpha" ) == 0 && pddiAlphaLineCount++ >= 240 )
+        return;
+    if( subsystem != NULL && strcmp( subsystem, "pddi-scissor" ) == 0 && pddiScissorLineCount++ >= 240 )
+        return;
+    if( subsystem != NULL && strcmp( subsystem, "touch-context" ) == 0 && touchContextLineCount++ >= 16 )
+        return;
+
+    ++lineCount;
+
+    const char* docs = iOSGetDocumentsDir();
+    char path[ 1024 ] = { 0 };
+    if( docs != NULL && docs[ 0 ] != '\0' ) {
+        snprintf( path, sizeof( path ), "%s/srr2_runtime_diag.txt", docs );
+    } else {
+        snprintf( path, sizeof( path ), "/tmp/srr2_runtime_diag.txt" );
+    }
+
+    FILE* f = fopen( path, "a" );
+    if( f != NULL ) {
+        fprintf( f, "%ld [%s] %s\n", (long)time( NULL ),
+                 subsystem != NULL ? subsystem : "runtime",
+                 message != NULL ? message : "" );
+        fclose( f );
+    }
 }
 #endif
 

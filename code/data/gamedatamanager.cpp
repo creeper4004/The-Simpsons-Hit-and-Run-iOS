@@ -20,7 +20,56 @@
 #include <data/gamedatamanager.h>
 #include <data/savegameinfo.h>
 #include <data/memcard/memorycardmanager.h>
+#ifdef RAD_IOS
+#include <gameflow/gameflow.h>
+#include <contexts/contextenum.h>
+#endif
 #include <string.h>
+#ifdef RAD_IOS
+#include <stdio.h>
+#include <stdlib.h>
+extern "C" void iOSRuntimeLog( const char* subsystem, const char* message );
+
+class IOSSaveSelfTestCallback : public GameDataSaveCallback
+{
+public:
+    IOSSaveSelfTestCallback() : m_slot( 0 ), m_finished( false ) {}
+
+    void SetSlot( unsigned int slot ) { m_slot = slot; }
+
+    virtual void OnSaveGameComplete( radFileError errorCode )
+    {
+        char trace[ 160 ];
+        snprintf( trace, sizeof( trace ), "self-test write callback error=%d slot=%u",
+                  static_cast<int>( errorCode ), m_slot );
+        iOSRuntimeLog( "save-test", trace );
+
+        if( errorCode == Success )
+        {
+            SaveGameInfo info;
+            bool corrupt = false;
+            IRadDrive* drive = GetMemoryCardManager()->GetCurrentDrive();
+            const bool exists = drive != NULL &&
+                GetGameDataManager()->GetSaveGameInfo( drive, m_slot, &info, &corrupt );
+            snprintf( trace, sizeof( trace ), "self-test readback exists=%d corrupt=%d valid=%d",
+                      exists ? 1 : 0, corrupt ? 1 : 0,
+                      exists && !corrupt && info.CheckData() ? 1 : 0 );
+            iOSRuntimeLog( "save-test", trace );
+        }
+        m_finished = true;
+    }
+
+    bool IsFinished() const { return m_finished; }
+
+private:
+    unsigned int m_slot;
+    bool m_finished = false;
+};
+
+static IOSSaveSelfTestCallback s_iOSSaveSelfTestCallback;
+static bool s_iOSSaveSelfTestStarted = false;
+static bool s_iOSSaveSelfTestWaitingLogged = false;
+#endif
 
 #ifndef WORLD_BUILDER
 #include <memory/srrmemory.h>
@@ -309,6 +358,51 @@ MEMTRACK_POP_GROUP( "GameDataManager" );
 void
 GameDataManager::Update( unsigned int elapsedTime )
 {
+#ifdef RAD_IOS
+    const char* runSaveSelfTest = getenv( "IOS_SAVE_SELF_TEST" );
+    GameFlow* gameFlow = GetGameFlow();
+    if( !s_iOSSaveSelfTestStarted && runSaveSelfTest != NULL &&
+        strcmp( runSaveSelfTest, "1" ) == 0 &&
+        gameFlow != NULL &&
+        (gameFlow->GetCurrentContext() == CONTEXT_FRONTEND ||
+         gameFlow->GetCurrentContext() == CONTEXT_PAUSE) &&
+        m_currentFileOperation == FILE_OP_NONE )
+    {
+        IRadDrive* drive = GetMemoryCardManager()->GetCurrentDrive();
+        if( drive == NULL || !GetMemoryCardManager()->IsCurrentDriveReady( true ) )
+        {
+            if( !s_iOSSaveSelfTestWaitingLogged )
+            {
+                iOSRuntimeLog( "save-test", "waiting for writable save drive" );
+                s_iOSSaveSelfTestWaitingLogged = true;
+            }
+        }
+        else
+        {
+            s_iOSSaveSelfTestStarted = true;
+            bool foundFreeSlot = false;
+            for( unsigned int slot = 0; slot < NUM_GAME_SLOTS; ++slot )
+            {
+                SaveGameInfo info;
+                if( !GetSaveGameInfo( drive, slot, &info ) )
+                {
+                    s_iOSSaveSelfTestCallback.SetSlot( slot );
+                    char trace[ 96 ];
+                    snprintf( trace, sizeof( trace ), "starting in unused slot=%u", slot );
+                    iOSRuntimeLog( "save-test", trace );
+                    SaveGame( slot, &s_iOSSaveSelfTestCallback );
+                    foundFreeSlot = true;
+                    break;
+                }
+            }
+            if( !foundFreeSlot )
+            {
+                iOSRuntimeLog( "save-test", "skipped: every save slot already contains data" );
+            }
+        }
+    }
+#endif
+
     if( m_currentFileOperation != FILE_OP_NONE )
     {
 #ifdef ENABLE_MINIMUM_LOAD_SAVE_TIME
@@ -434,6 +528,7 @@ GameDataManager::LoadGame( unsigned int slot, GameDataLoadCallback* callback, co
 		strcpy( filename, load_filename ); // filename is passed in for xbox
     IRadDrive* currentDrive = GetMemoryCardManager()->GetCurrentDrive();
     rAssert( currentDrive );
+
 #ifndef RAD_WIN32
     currentDrive->SaveGameOpenAsync( &m_radFile,
                                      filename,
@@ -563,6 +658,18 @@ GameDataManager::SaveGame( unsigned int slot, GameDataSaveCallback* callback )
 
 	IRadDrive* currentDrive = GetMemoryCardManager()->GetCurrentDrive();
 	rAssert( currentDrive );
+
+#ifdef RAD_IOS
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+    {
+        char trace[ 256 ];
+        snprintf( trace, sizeof( trace ), "save begin slot=%u file=%s drive=%s bytes=%u",
+                  slot, filename,
+                  currentDrive != NULL ? currentDrive->GetDriveName() : "(null)",
+                  m_gameDataSize );
+        iOSRuntimeLog( "save", trace );
+    }
+#endif
 
 #ifdef RAD_XBOX
 	m_saveGameInfoHandler->FormatDisplay(filename, sizeof(filename)); // define filename for xbox
@@ -959,6 +1066,10 @@ GameDataManager::OnFileOperationsComplete( void* pUserData )
 
         case FILE_OP_OPEN_FOR_WRITING: // done opening file for writing
         {
+#ifdef RAD_IOS
+            if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+                iOSRuntimeLog( "save", "file opened; queueing data write" );
+#endif
             rAssert( m_radFile );
             rAssert( m_radFile->IsOpen() );
 
@@ -973,6 +1084,10 @@ GameDataManager::OnFileOperationsComplete( void* pUserData )
 
         case FILE_OP_WRITE: // done writing data to file
         {
+#ifdef RAD_IOS
+            if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+                iOSRuntimeLog( "save", "data write complete; queueing commit" );
+#endif
             rAssert( m_radFile );
 
             m_radFile->CommitAsync();
@@ -985,6 +1100,10 @@ GameDataManager::OnFileOperationsComplete( void* pUserData )
 
         case FILE_OP_COMMIT: // done committing all data writes to file
         {
+#ifdef RAD_IOS
+            if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+                iOSRuntimeLog( "save", "commit complete; reporting save success" );
+#endif
             rAssert( m_radFile );
 
             m_radFile->Release();
@@ -1048,6 +1167,18 @@ GameDataManager::OnDriveError( radFileError error,
                                void* pUserData )
 {
     m_lastError = error; // cache error for synchronous call 
+#ifdef RAD_IOS
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+    {
+        char trace[ 192 ];
+        const bool expectedMissingSave = error == FileNotFound &&
+            m_currentFileOperation == FILE_OP_FILE_CHECK;
+        snprintf( trace, sizeof( trace ), "drive error=%d drive=%s operation=%d expectedMissingSave=%d",
+                  static_cast<int>( error ), pDriveName != NULL ? pDriveName : "(null)",
+                  static_cast<int>( m_currentFileOperation ), expectedMissingSave ? 1 : 0 );
+        iOSRuntimeLog( "save-error", trace );
+    }
+#endif
     switch( m_currentFileOperation )
     {
         case FILE_OP_OPEN_FOR_READING:

@@ -47,6 +47,12 @@
 #include <Sprite.h>
 #include <Polygon.h>
 
+#ifdef RAD_IOS
+#include <stdio.h>
+#include <stdlib.h>
+extern "C" void iOSRuntimeLog( const char* subsystem, const char* message );
+#endif
+
 //===========================================================================
 // Global Data, Local Data, Local Classes
 //===========================================================================
@@ -235,6 +241,17 @@ MEMTRACK_PUSH_GROUP( "CHudMap" );
     rAssert( m_p3dHole != NULL );
     m_p3dHole->SetCamera( m_hudMapCam->GetCamera() );
     m_p3dHole->SetColourWrite( false );
+#ifdef RAD_IOS
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+    {
+        char trace[ 160 ];
+        snprintf( trace, sizeof( trace ),
+                  "map-mask setup player=%d mask=%p colorWrite=off mapSize=%dx%d",
+                  playerID, static_cast<void*>( m_p3dHole ),
+                  m_originalWidth, m_originalHeight );
+        iOSRuntimeLog( "hud-map", trace );
+    }
+#endif
 
     if( CGuiScreen::IsWideScreenDisplay() )
     {
@@ -1274,6 +1291,14 @@ void CHudMap::Reset()
 //===========================================================================
 void CHudMap::SetVisible( bool isVisible )
 {
+#ifdef RAD_IOS
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL && m_isVisible != isVisible )
+    {
+        char trace[ 96 ];
+        snprintf( trace, sizeof( trace ), "map visibility=%d", isVisible ? 1 : 0 );
+        iOSRuntimeLog( "hud-map", trace );
+    }
+#endif
     m_isVisible = isVisible;
 
     rAssert( m_p3dMap != NULL );

@@ -18,6 +18,11 @@
 // Includes 
 //===========================================================================
 #include <presentation/gui/ingame/guimanageringame.h>
+#ifdef RAD_IOS
+#include <stdio.h>
+#include <stdlib.h>
+extern "C" void iOSRuntimeLog( const char* subsystem, const char* message );
+#endif
 #include <presentation/gui/guiwindow.h> // for window IDs
 #include <presentation/gui/guisystem.h>
 
@@ -1359,6 +1364,22 @@ CGuiManagerInGame::GotoPauseScreen()
     m_enteringPauseMenu = false;
     GetGameplayContext()->PauseAllButPresentation( false );
 
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
+    // The HUD remains loaded behind the in-game screens. Hide it while the
+    // pause/menu UI is active so the radar and gameplay overlays do not show
+    // through or compete with the menu.
+    if( s_currentHUD != NULL )
+    {
+        s_currentHUD->SetVisible( false );
+    }
+#ifdef RAD_IOS
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+    {
+        iOSRuntimeLog( "hud-visibility", "enter-pause: HUD layers hidden" );
+    }
+#endif
+#endif
+
     rAssert( m_nextScreen == CGuiWindow::GUI_SCREEN_ID_PAUSE_SUNDAY ||
              m_nextScreen == CGuiWindow::GUI_SCREEN_ID_PAUSE_MISSION );
 
@@ -1373,6 +1394,25 @@ void
 CGuiManagerInGame::GotoHUDScreen()
 {
     m_exitingPauseMenu = false;
+
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
+    // Restore the HUD when returning to gameplay, preserving missions that
+    // intentionally hide it.
+    if( s_currentHUD != NULL )
+    {
+        Mission* currentMission = GetGameplayManager()->GetCurrentMission();
+        const bool visible = currentMission != NULL && currentMission->IsHUDVisible();
+        s_currentHUD->SetVisible( visible );
+#ifdef RAD_IOS
+        if( getenv( "IOS_RUNTIME_DIAG" ) != NULL )
+        {
+            char trace[ 96 ];
+            snprintf( trace, sizeof( trace ), "leave-pause: HUD layers visible=%d", visible ? 1 : 0 );
+            iOSRuntimeLog( "hud-visibility", trace );
+        }
+#endif
+    }
+#endif
 
     GetEventManager()->TriggerEvent( EVENT_GUI_LEAVING_PAUSE_MENU );
 

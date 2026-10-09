@@ -1,5 +1,33 @@
 # iOS MGL Render Bring-Up — Session Handoff (2026-09-03)
 
+## Latest status — 2026-10-09 save and overlay diagnostics
+
+- iOS/mobile save storage now selects the SDL default writable drive after the
+  drive-open pass completes. This was missing on iOS because the console memory
+  card picker/check flow is skipped; without a selected current drive, menu
+  saves could fail or return through the wrong UI path.
+- The opt-in simulator save self-test exercises the normal asynchronous
+  open/write/commit sequence, then opens the new slot and validates
+  `SaveGameInfo`. Two separate empty slots passed (`error=0`, `exists=1`,
+  `corrupt=0`, `valid=1`) and produced 7,194-byte files. This verifies storage
+  persistence, but does not yet verify the save menu's touch-driven return flow.
+- `IOS_RUNTIME_DIAG=1` writes a bounded `Documents/srr2_runtime_diag.txt` trace
+  for save-drive readiness and callbacks, HUD/minimap visibility, touch-HUD
+  profiles, scissor/depth/stencil/color-write states, material alpha settings,
+  and the actual GLES blend equation/factors. `IOS_SAVE_SELF_TEST=1` opts into
+  writing one test save to the first empty slot; keep it off during normal play.
+  Usage and expected completion lines are in `IOS_RUNTIME_DIAGNOSTICS.md`.
+- User screenshots still show black/opaque panel regions and characters
+  overlapping menu text. These rendering defects are **not fixed**. The latest
+  simulator trace is currently a front-end run; the mission/pause screens still
+  need a captured repro to correlate panel rendering with the new blend/state
+  logs. The simulator Release build succeeds and is installed. No app launch was
+  performed on the physical phone, and the diagnostic build has not been
+  installed there.
+- The simulator self-test created `Save1` and `Save2` in its app Documents
+  directory. The latest runtime trace and screenshots are local simulator
+  artifacts, not checked into the repository.
+
 ## Latest live result — 2026-10-08 evening
 
 ### Streamed terrain and radar follow-up (22:24 local)

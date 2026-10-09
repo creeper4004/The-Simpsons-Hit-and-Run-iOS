@@ -11,6 +11,11 @@
 #include <vector>
 #include <microprofile.h>
 #include <SDL.h>
+#ifdef RAD_IOS
+#include <stdio.h>
+#include <stdlib.h>
+extern "C" void iOSRuntimeLog( const char* subsystem, const char* message );
+#endif
 
 pddiShadeColourTable pglMat::colourTable[] = 
 {
@@ -285,6 +290,28 @@ void pglMat::SetDevPass(unsigned pass)
         glBlendEquation(alphaBlendTable[texEnv[i].alphaBlendMode][0]);
         glBlendFunc(alphaBlendTable[texEnv[i].alphaBlendMode][1],alphaBlendTable[texEnv[i].alphaBlendMode][2]);
     }
+#ifdef RAD_IOS
+    static int lastLoggedBlendMode = -1;
+    const int blendMode = static_cast<int>( texEnv[i].alphaBlendMode );
+    if( getenv( "IOS_RUNTIME_DIAG" ) != NULL && blendMode != lastLoggedBlendMode )
+    {
+        char trace[ 160 ];
+        if( texEnv[i].alphaBlendMode == PDDI_BLEND_NONE )
+        {
+            snprintf( trace, sizeof( trace ), "material blend mode=%d enabled=0", blendMode );
+        }
+        else
+        {
+            snprintf( trace, sizeof( trace ), "material blend mode=%d enabled=1 equation=0x%x src=0x%x dst=0x%x",
+                      blendMode,
+                      static_cast<unsigned int>( alphaBlendTable[texEnv[i].alphaBlendMode][0] ),
+                      static_cast<unsigned int>( alphaBlendTable[texEnv[i].alphaBlendMode][1] ),
+                      static_cast<unsigned int>( alphaBlendTable[texEnv[i].alphaBlendMode][2] ) );
+        }
+        iOSRuntimeLog( "pddi-alpha", trace );
+        lastLoggedBlendMode = blendMode;
+    }
+#endif
 
     if( texEnv[i].twoSided || context->GetCullMode() == PDDI_CULL_NONE )
     {
