@@ -1,0 +1,2 @@
+# Unified diffs retain whitespace from the vendor source they describe.
+mgl-ios/mgl-ios.patch -whitespace

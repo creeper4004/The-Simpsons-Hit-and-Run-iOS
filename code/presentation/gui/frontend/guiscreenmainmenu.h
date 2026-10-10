@@ -28,6 +28,9 @@
 // Nested Includes
 //===========================================================================
 #include <presentation/gui/guiscreen.h>
+#ifdef RAD_IOS
+#include <data/gamedatamanager.h>
+#endif
 
 #include <render/Enums/RenderEnums.h>
 
@@ -41,6 +44,9 @@ class tAnimation;
 // Interface Definitions
 //===========================================================================
 class CGuiScreenMainMenu : public CGuiScreen
+#ifdef RAD_IOS
+                        , public GameDataLoadCallback
+#endif
 {
 public:
     CGuiScreenMainMenu( Scrooby::Screen* pScreen, CGuiEntity* pParent );
@@ -51,6 +57,9 @@ public:
 								unsigned int param2 = 0 );
 
     void InitMenu();
+#ifdef RAD_IOS
+    void OnLoadGameComplete( radFileError errorCode );
+#endif
     virtual CGuiMenu* HasMenu() { return m_pMenu; }
 
 protected:
@@ -63,6 +72,10 @@ protected:
     void UpdateOutro( unsigned int elapsedTime );
 
 private:
+#ifdef RAD_IOS
+    void TryStartupSaveLoad();
+    bool m_iosStartupLoadPending;
+#endif
     enum eMainMenuSelection
     {
 #ifdef RAD_DEMO

@@ -304,6 +304,10 @@ Vehicle* Mission::GetVehicleByName( char* name )
 //=============================================================================
 void Mission::Initialize( GameMemoryAllocator heap)
 {
+#ifdef RAD_IOS
+    extern void iOSMissionDiagnostic(const char*, const char*);
+    iOSMissionDiagnostic("initialize", GetName());
+#endif
     mHeap = heap;
 
     unsigned int i;
@@ -410,6 +414,10 @@ void Mission::Initialize( GameMemoryAllocator heap)
 //=============================================================================
 void Mission::Finalize()
 {
+#ifdef RAD_IOS
+    extern void iOSMissionDiagnostic(const char*, const char*);
+    iOSMissionDiagnostic("finalize-begin", GetName());
+#endif
     SetToStage( -1 );
 
     //chuck adding draw synch I hope to fix the level 5 m1 crash when user aborts missions.
@@ -620,6 +628,9 @@ void Mission::Finalize()
         delete mDoorStars;
         mDoorStars = NULL;
     }
+#ifdef RAD_IOS
+    iOSMissionDiagnostic("finalize-end", GetName());
+#endif
 }
 
 //=============================================================================

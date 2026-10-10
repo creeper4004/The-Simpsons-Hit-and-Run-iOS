@@ -77,7 +77,7 @@ index 4a6f0f7..8adb2e5 100644
          unsigned x, y, z;
      } local_workgroup_size;
 diff --git a/MGL/src/MGLRenderer.m b/MGL/src/MGLRenderer.m
-index 31cb54e..4d442e9 100755
+index 31cb54e..663acf4 100755
 --- a/MGL/src/MGLRenderer.m
 +++ b/MGL/src/MGLRenderer.m
 @@ -35,6 +35,21 @@
@@ -140,16 +140,23 @@ index 31cb54e..4d442e9 100755
 
      // ways we will only write to this
      if ((ptr->storage_flags & GL_MAP_READ_BIT) == 0)
-@@ -393,7 +421,7 @@ - (void) bindMTLBuffer:(Buffer *) ptr
+@@ -392,8 +420,13 @@ - (void) bindMTLBuffer:(Buffer *) ptr
+                                              options:options];
                  assert(buffer);
 
-                 // Don't deallocate the original buffer for small sizes to maintain compatibility
+-                // Don't deallocate the original buffer for small sizes to maintain compatibility
 -                ptr->data.mtl_data = (void *)CFBridgingRetain(buffer);
-+                // Retain once below, just like the large-buffer path.
++                // The Metal copy now owns the bytes. Keeping the VM allocation
++                // here leaks a page each time a small dynamic buffer is orphaned.
++                kern_return_t err = vm_deallocate(mach_task_self(),
++                                                  ptr->data.buffer_data,
++                                                  ptr->data.buffer_size);
++                assert(err == KERN_SUCCESS);
++                ptr->data.buffer_data = (vm_address_t)buffer.contents;
              }
          }
          else
-@@ -430,7 +458,6 @@ - (bool) mapGLBuffersToMTLBufferMap:(BufferMapList *)buffer_map stage: (int) sta
+@@ -430,7 +463,6 @@ - (bool) mapGLBuffersToMTLBufferMap:(BufferMapList *)buffer_map stage: (int) sta
      
      // init mapped buffer count
      buffer_map->count = 0;
@@ -157,7 +164,7 @@ index 31cb54e..4d442e9 100755
      // bind uniforms, shader storage and atomics to buffer map
      for(int type=0; type<4; type++)
      {
-@@ -461,14 +488,20 @@ - (bool) mapGLBuffersToMTLBufferMap:(BufferMapList *)buffer_map stage: (int) sta
+@@ -461,14 +493,20 @@ - (bool) mapGLBuffersToMTLBufferMap:(BufferMapList *)buffer_map stage: (int) sta
                  // get the ubo binding from spirv
                  spirv_binding = [self getProgramBinding:stage type:spvc_type index: i];
 
@@ -180,7 +187,7 @@ index 31cb54e..4d442e9 100755
                      buffer_map->count++;
                      buffers_to_be_mapped--;
                      
-@@ -497,10 +530,13 @@ - (bool) mapGLBuffersToMTLBufferMap:(BufferMapList *)buffer_map stage: (int) sta
+@@ -497,10 +535,13 @@ - (bool) mapGLBuffersToMTLBufferMap:(BufferMapList *)buffer_map stage: (int) sta
 
          // vao buffers start after the uniforms and shader buffers
          vao_buffer_start = buffer_map->count;
@@ -198,7 +205,7 @@ index 31cb54e..4d442e9 100755
              return false;
          }
          buffer_map->buffers[vao_buffer_start].buf = NULL;
-@@ -532,7 +568,7 @@ - (bool) mapGLBuffersToMTLBufferMap:(BufferMapList *)buffer_map stage: (int) sta
+@@ -532,7 +573,7 @@ - (bool) mapGLBuffersToMTLBufferMap:(BufferMapList *)buffer_map stage: (int) sta
                  if (map_buffer == NULL)
                  {
                      // map the buffer object to a metal vertex index
@@ -207,7 +214,7 @@ index 31cb54e..4d442e9 100755
                      buffer_map->buffers[vao_buffer_start].attribute_mask |= (0x1 << att);
                      buffer_map->buffers[vao_buffer_start].buf = gl_buffer;
                      buffer_map->count++;
-@@ -564,7 +600,7 @@ - (bool) mapGLBuffersToMTLBufferMap:(BufferMapList *)buffer_map stage: (int) sta
+@@ -564,7 +605,7 @@ - (bool) mapGLBuffersToMTLBufferMap:(BufferMapList *)buffer_map stage: (int) sta
                      if (found_buffer == false)
                      {
                          // map the next buffer object to a metal vertex index
@@ -216,7 +223,7 @@ index 31cb54e..4d442e9 100755
                          buffer_map->buffers[buffer_map->count].attribute_mask = (0x1 << att);
                          buffer_map->buffers[buffer_map->count].buf = gl_buffer;
                          buffer_map->count++;
-@@ -645,13 +681,17 @@ - (bool) updateDirtyBuffer:(Buffer *)ptr
+@@ -645,13 +686,17 @@ - (bool) updateDirtyBuffer:(Buffer *)ptr
          // contents in check for EVERY drawing operation
          if (ptr->access & GL_MAP_COHERENT_BIT)
          {
@@ -234,7 +241,7 @@ index 31cb54e..4d442e9 100755
 
              ptr->data.dirty_bits = 0;
          }
-@@ -861,6 +901,75 @@ - (void)swizzleTexDesc:(MTLTextureDescriptor *)tex_desc forTex:(Texture*)tex
+@@ -861,6 +906,75 @@ - (void)swizzleTexDesc:(MTLTextureDescriptor *)tex_desc forTex:(Texture*)tex
      tex_desc.swizzle = MTLTextureSwizzleChannelsMake(channel_r, channel_g, channel_b, channel_a);
  }
 
@@ -310,7 +317,7 @@ index 31cb54e..4d442e9 100755
  - (id<MTLTexture>) createMTLTextureFromGLTexture:(Texture *) tex
  {
      // PROPER FIX: Enhanced pre-creation validation to prevent AGX driver issues
-@@ -1086,7 +1195,21 @@ - (void)swizzleTexDesc:(MTLTextureDescriptor *)tex_desc forTex:(Texture*)tex
+@@ -1086,7 +1200,21 @@ - (void)swizzleTexDesc:(MTLTextureDescriptor *)tex_desc forTex:(Texture*)tex
          return NULL;
      }
 
@@ -333,7 +340,7 @@ index 31cb54e..4d442e9 100755
      {
          NSLog(@"MGL DEBUG: DIRTY_TEXTURE_DATA detected - attempting texture filling");
          NSLog(@"MGL DEBUG: Texture details: target=0x%x, internalformat=0x%x, levels=%d",
-@@ -1431,7 +1554,7 @@ - (void)swizzleTexDesc:(MTLTextureDescriptor *)tex_desc forTex:(Texture*)tex
+@@ -1431,7 +1559,7 @@ - (void)swizzleTexDesc:(MTLTextureDescriptor *)tex_desc forTex:(Texture*)tex
              }
          }
      }
@@ -342,7 +349,7 @@ index 31cb54e..4d442e9 100755
      {
          // PROPER FIX: Enable texture filling with AGX safety and proper memory alignment
          MTLRegion region = MTLRegionMake2D(0, 0, texture.width, texture.height);
-@@ -1820,7 +1943,7 @@ - (void)swizzleTexDesc:(MTLTextureDescriptor *)tex_desc forTex:(Texture*)tex
+@@ -1820,7 +1948,7 @@ - (void)swizzleTexDesc:(MTLTextureDescriptor *)tex_desc forTex:(Texture*)tex
      tex->dirty_bits = 0;
 
      // EMERGENCY FALLBACK: Ensure all textures have some content to prevent magenta
@@ -351,7 +358,7 @@ index 31cb54e..4d442e9 100755
          (texture.width <= 512 && texture.height <= 512)) {
 
          NSLog(@"MGL EMERGENCY: Applying emergency texture fill to prevent magenta screen");
-@@ -2269,8 +2392,16 @@ - (bool) bindTexturesToCurrentRenderEncoder
+@@ -2269,8 +2397,16 @@ - (bool) bindTexturesToCurrentRenderEncoder
              Texture *ptr;
 
              spirv_binding = [self getProgramBinding:_FRAGMENT_SHADER type:SPVC_RESOURCE_TYPE_SAMPLED_IMAGE index: i];
@@ -369,7 +376,7 @@ index 31cb54e..4d442e9 100755
 
              if (ptr)
              {
-@@ -2282,15 +2413,42 @@ - (bool) bindTexturesToCurrentRenderEncoder
+@@ -2282,15 +2418,42 @@ - (bool) bindTexturesToCurrentRenderEncoder
                  texture = (__bridge id<MTLTexture>)(ptr->mtl_data);
                  assert(texture);
 
@@ -414,7 +421,7 @@ index 31cb54e..4d442e9 100755
 
                      // delete existing sampler if dirty
                      if (gl_sampler->dirty_bits)
-@@ -2461,7 +2619,7 @@ - (bool)bindMTLTexture:(Texture *)tex
+@@ -2461,7 +2624,7 @@ - (bool)bindMTLTexture:(Texture *)tex
                  NSLog(@"MGL ERROR: Even fallback texture creation failed - this texture will remain NULL");
              }
          } else {
@@ -423,7 +430,7 @@ index 31cb54e..4d442e9 100755
          }
 
          tex->params.mtl_data = (void *)CFBridgingRetain([self createMTLSamplerForTexParam:&tex->params target:tex->target]);
-@@ -2693,7 +2851,7 @@ - (id)newDrawBuffer:(MTLPixelFormat)pixelFormat isDepthStencil:(bool)depthStenci
+@@ -2693,7 +2856,7 @@ - (id)newDrawBuffer:(MTLPixelFormat)pixelFormat isDepthStencil:(bool)depthStenci
  {
      id<MTLTexture> texture;
      MTLTextureDescriptor *tex_desc;
@@ -432,7 +439,7 @@ index 31cb54e..4d442e9 100755
 
      assert(_layer);
      frame = [_layer frame];
-@@ -2741,16 +2899,14 @@ - (id)newDrawBufferWithCustomSize:(MTLPixelFormat)pixelFormat isDepthStencil:(bo
+@@ -2741,16 +2904,14 @@ - (id)newDrawBufferWithCustomSize:(MTLPixelFormat)pixelFormat isDepthStencil:(bo
 
  - (bool) checkDrawBufferSize:(GLuint) index;
  {
@@ -452,7 +459,7 @@ index 31cb54e..4d442e9 100755
          return false;
 
      return true;
-@@ -2782,6 +2938,19 @@ - (MTLStencilOperation) mtlStencilOpForGLOp:(GLenum) op
+@@ -2782,6 +2943,19 @@ - (MTLStencilOperation) mtlStencilOpForGLOp:(GLenum) op
 
  - (void) updateCurrentRenderEncoder
  {
@@ -472,7 +479,7 @@ index 31cb54e..4d442e9 100755
      if (ctx->state.caps.depth_test ||
          ctx->state.caps.stencil_test)
      {
-@@ -2835,24 +3004,47 @@ - (void) updateCurrentRenderEncoder
+@@ -2835,24 +3009,47 @@ - (void) updateCurrentRenderEncoder
 
          [_currentRenderEncoder setDepthStencilState: dsState];
      }
@@ -533,7 +540,7 @@ index 31cb54e..4d442e9 100755
      {
          MTLCullMode cull_mode;
 
-@@ -2872,6 +3064,10 @@ - (void) updateCurrentRenderEncoder
+@@ -2872,6 +3069,10 @@ - (void) updateCurrentRenderEncoder
 
          [_currentRenderEncoder setFrontFacingWinding:winding];
      }
@@ -544,7 +551,7 @@ index 31cb54e..4d442e9 100755
 
      if (ctx->state.caps.depth_clamp)
      {
-@@ -2917,7 +3113,7 @@ - (bool) newRenderEncoder
+@@ -2917,7 +3118,7 @@ - (bool) newRenderEncoder
          _drawable = [_layer nextDrawable];
 
          // late init of gl scissor box on attachment to window system
@@ -553,7 +560,7 @@ index 31cb54e..4d442e9 100755
          frame = [_layer frame];
 
          ctx->state.var.scissor_box[2] = frame.size.width;
-@@ -3055,7 +3251,7 @@ - (bool) newRenderEncoder
+@@ -3055,7 +3256,7 @@ - (bool) newRenderEncoder
 
          // attach depth
          if (ctx->depth_format.mtl_pixel_format &&
@@ -562,7 +569,7 @@ index 31cb54e..4d442e9 100755
          {
              if(_drawBuffers[mgl_drawbuffer].depthbuffer)
              {
-@@ -3070,7 +3266,7 @@ - (bool) newRenderEncoder
+@@ -3070,7 +3271,7 @@ - (bool) newRenderEncoder
 
          // attach stencil
          if (ctx->stencil_format.mtl_pixel_format &&
@@ -571,7 +578,7 @@ index 31cb54e..4d442e9 100755
          {
              if(_drawBuffers[mgl_drawbuffer].stencilbuffer)
              {
-@@ -3159,7 +3355,37 @@ - (bool) newRenderEncoder
+@@ -3159,7 +3360,37 @@ - (bool) newRenderEncoder
          _renderPassDescriptor.stencilAttachment.loadAction = MTLLoadActionLoad;
      }
 
@@ -609,7 +616,7 @@ index 31cb54e..4d442e9 100755
 
      // create a render encoder from the renderpass descriptor
      // CRITICAL SAFETY: Validate inputs before creating render encoder
-@@ -3187,12 +3413,20 @@ - (bool) newRenderEncoder
+@@ -3187,12 +3418,20 @@ - (bool) newRenderEncoder
          _currentRenderEncoder = nil;
      }
 
@@ -634,7 +641,7 @@ index 31cb54e..4d442e9 100755
      }
 
      NSLog(@"MGL DEBUG: About to create render encoder with descriptor and command buffer");
-@@ -3657,18 +3891,55 @@ -(MTLRenderPipelineDescriptor *)generatePipelineDescriptor
+@@ -3657,18 +3896,55 @@ -(MTLRenderPipelineDescriptor *)generatePipelineDescriptor
      {
          pipelineStateDescriptor.colorAttachments[0].pixelFormat = ctx->pixel_format.mtl_pixel_format;
 
@@ -697,7 +704,7 @@ index 31cb54e..4d442e9 100755
  #pragma mark vertex descriptor
  - (MTLVertexDescriptor *)generateVertexDescriptor
  {
-@@ -3827,7 +4098,7 @@ -(void)bindBlendStateToPipelineStateDescriptor:(MTLRenderPipelineDescriptor *)pi
+@@ -3827,7 +4103,7 @@ -(void)bindBlendStateToPipelineStateDescriptor:(MTLRenderPipelineDescriptor *)pi
      {
          if (pipelineStateDescriptor.colorAttachments[i].pixelFormat != MTLPixelFormatInvalid)
          {
@@ -706,7 +713,7 @@ index 31cb54e..4d442e9 100755
 
              pipelineStateDescriptor.colorAttachments[i].sourceRGBBlendFactor = _src_blend_rgb_factor[i];
              pipelineStateDescriptor.colorAttachments[i].destinationRGBBlendFactor = _dst_blend_rgb_factor[i];
-@@ -3999,6 +4270,9 @@ - (bool) processGLState: (bool) draw_command
+@@ -3999,6 +4275,9 @@ - (bool) processGLState: (bool) draw_command
      }
 
      //logDirtyBits(ctx);
@@ -716,7 +723,7 @@ index 31cb54e..4d442e9 100755
      
      // since a clear is embedded into a render encoder
      if (VAO() == NULL)
-@@ -4070,6 +4344,7 @@ - (bool) processGLState: (bool) draw_command
+@@ -4070,6 +4349,7 @@ - (bool) processGLState: (bool) draw_command
          return false;
      }
 
@@ -724,7 +731,7 @@ index 31cb54e..4d442e9 100755
      if (ctx->state.dirty_bits)
      {
          // dirty state covers all rendering attachments and general state
-@@ -4158,11 +4433,24 @@ - (bool) processGLState: (bool) draw_command
+@@ -4158,11 +4438,24 @@ - (bool) processGLState: (bool) draw_command
 
              ctx->state.dirty_bits &= ~DIRTY_BUFFER;
          }
@@ -751,7 +758,7 @@ index 31cb54e..4d442e9 100755
              }
 
              // a dirty render state may just be something like alpha changes which don't require a new renderbuffer
-@@ -4174,7 +4462,7 @@ - (bool) processGLState: (bool) draw_command
+@@ -4174,7 +4467,7 @@ - (bool) processGLState: (bool) draw_command
          }
 
          // new pipeline / vertex / renderbuffer and pipelinestate descriptor, should probably make this a single dirty bit
@@ -760,7 +767,7 @@ index 31cb54e..4d442e9 100755
          {
              // create pipeline descriptor
              MTLRenderPipelineDescriptor *pipelineStateDescriptor;
-@@ -4188,113 +4476,29 @@ - (bool) processGLState: (bool) draw_command
+@@ -4188,113 +4481,29 @@ - (bool) processGLState: (bool) draw_command
              vertexDescriptor = [self generateVertexDescriptor];
              RETURN_FALSE_ON_NULL(vertexDescriptor);
 
@@ -889,7 +896,7 @@ index 31cb54e..4d442e9 100755
              }
 
              ctx->state.dirty_bits &= ~(DIRTY_PROGRAM | DIRTY_VAO | DIRTY_FBO);
-@@ -4311,7 +4515,9 @@ - (bool) processGLState: (bool) draw_command
+@@ -4311,7 +4520,9 @@ - (bool) processGLState: (bool) draw_command
          // we missed something
          //assert(ctx->state.dirty_bits == 0);
      }
@@ -900,7 +907,7 @@ index 31cb54e..4d442e9 100755
      {
          // buffer data can be changed but the bindings remain in place.. so we need to update the data if this is the case
          // like a uniform or buffer sub data call
-@@ -4650,6 +4856,15 @@ -(bool) processBuffer:(Buffer*)ptr
+@@ -4650,6 +4861,15 @@ -(bool) processBuffer:(Buffer*)ptr
 
  -(void) flushCommandBuffer: (bool) finish
  {
@@ -916,7 +923,7 @@ index 31cb54e..4d442e9 100755
      // SAFETY: Check Metal objects before processing
      if (!_device || !_commandQueue) {
          NSLog(@"MGL ERROR: Metal device or queue is NULL in flushCommandBuffer");
-@@ -4681,7 +4896,8 @@ -(void) flushCommandBuffer: (bool) finish
+@@ -4681,7 +4901,8 @@ -(void) flushCommandBuffer: (bool) finish
      MTLCommandBufferStatus currentStatus = _currentCommandBuffer.status;
 
      if (currentStatus >= MTLCommandBufferStatusCommitted) {
@@ -926,7 +933,7 @@ index 31cb54e..4d442e9 100755
          return;
      }
 
-@@ -4948,6 +5164,47 @@ void mtlFlush (GLMContext glm_ctx, bool finish)
+@@ -4948,6 +5169,47 @@ void mtlFlush (GLMContext glm_ctx, bool finish)
  #pragma mark C interface to mtlSwapBuffers
  -(void) mtlSwapBuffers:(GLMContext) glm_ctx
  {
@@ -974,7 +981,7 @@ index 31cb54e..4d442e9 100755
      if (ctx->state.draw_buffer == GL_FRONT || ctx->state.draw_buffer == GL_COLOR_ATTACHMENT0)
      {
          // clear commands rely on processGLState
-@@ -5054,7 +5311,9 @@ -(void) mtlSwapBuffers:(GLMContext) glm_ctx
+@@ -5054,7 +5316,9 @@ -(void) mtlSwapBuffers:(GLMContext) glm_ctx
          _drawable = [_layer nextDrawable];
          if (_drawable == NULL) {
              NSLog(@"MGL WARNING: Failed to get next drawable in mtlSwapBuffers");
@@ -985,7 +992,7 @@ index 31cb54e..4d442e9 100755
              return;
          }
          
-@@ -5131,7 +5390,9 @@ -(void) mtlBufferSubData:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_t)o
+@@ -5131,7 +5395,9 @@ -(void) mtlBufferSubData:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_t)o
      data = mtl_buffer.contents;
      memcpy(data+offset, ptr, size);
 
@@ -995,7 +1002,7 @@ index 31cb54e..4d442e9 100755
  }
 
  void mtlBufferSubData(GLMContext glm_ctx, Buffer *buf, size_t offset, size_t size, const void *ptr)
-@@ -5157,7 +5418,9 @@ -(void *) mtlMapUnmapBuffer:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_
+@@ -5157,7 +5423,9 @@ -(void *) mtlMapUnmapBuffer:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_
          return mtl_buffer.contents + offset;
      }
 
@@ -1005,7 +1012,7 @@ index 31cb54e..4d442e9 100755
 
      return NULL;
  }
-@@ -5175,7 +5438,9 @@ -(void) mtlFlushMappedBufferRange:(GLMContext) glm_ctx buf:(Buffer *)buf offset:
+@@ -5175,7 +5443,9 @@ -(void) mtlFlushMappedBufferRange:(GLMContext) glm_ctx buf:(Buffer *)buf offset:
 
      mtl_buffer = (__bridge id<MTLBuffer>)(buf->data.mtl_data);
 
@@ -1015,7 +1022,7 @@ index 31cb54e..4d442e9 100755
  }
 
  void mtlFlushBufferRange(GLMContext glm_ctx, Buffer *buf, GLintptr offset, GLsizeiptr length)
-@@ -5501,9 +5766,54 @@ MTLIndexType getMTLIndexType(GLenum type)
+@@ -5501,9 +5771,54 @@ MTLIndexType getMTLIndexType(GLenum type)
  }
 
  #pragma mark C interface to mtlDrawArrays
@@ -1070,7 +1077,7 @@ index 31cb54e..4d442e9 100755
 
      // AGGRESSIVE MEMORY SAFETY: Immediate validation before any Metal operations (realistic bounds)
      if (!ctx || ((uintptr_t)ctx < 0x1000) || ((uintptr_t)ctx > 0x100000000000ULL)) {
-@@ -5515,6 +5825,21 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
+@@ -5515,6 +5830,21 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
          NSLog(@"MGL ERROR: mtlDrawArrays - processGLState failed, aborting");
          return; // Early return instead of continuing with invalid state
      }
@@ -1092,7 +1099,7 @@ index 31cb54e..4d442e9 100755
 
      // Additional safety check after processGLState
      if (!_currentRenderEncoder) {
-@@ -5522,6 +5847,86 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
+@@ -5522,6 +5852,86 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
          return;
      }
 
@@ -1179,7 +1186,7 @@ index 31cb54e..4d442e9 100755
      primitiveType = getMTLPrimitiveType(mode);
      assert(primitiveType != 0xFFFFFFFF);
 
-@@ -5566,11 +5971,70 @@ void mtlDrawArrays(GLMContext glm_ctx, GLenum mode, GLint first, GLsizei count)
+@@ -5566,11 +5976,70 @@ void mtlDrawArrays(GLMContext glm_ctx, GLenum mode, GLint first, GLsizei count)
  #pragma mark C interface to mtlDrawElements
  -(void) mtlDrawElements: (GLMContext) glm_ctx mode:(GLenum) mode count: (GLsizei) count type: (GLenum) type indices:(const void *)indices
  {
@@ -1250,7 +1257,7 @@ index 31cb54e..4d442e9 100755
      primitiveType = getMTLPrimitiveType(mode);
      assert(primitiveType != 0xFFFFFFFF);
 
-@@ -6238,7 +6702,34 @@ - (void) bindObjFuncsToGLMContext: (GLMContext) glm_ctx
+@@ -6238,7 +6707,34 @@ - (void) bindObjFuncsToGLMContext: (GLMContext) glm_ctx
      glm_ctx->mtl_funcs.mtlDispatchComputeIndirect = mtlDispatchComputeIndirect;
  }
 
@@ -1286,7 +1293,7 @@ index 31cb54e..4d442e9 100755
  {
      assert (window);
      assert (glm_ctx);
-@@ -6310,7 +6801,9 @@ - (id) createMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (NSWindow
+@@ -6310,7 +6806,9 @@ - (id) createMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (NSWindow
      return  (__bridge void *)(renderer);
  }
 
@@ -1297,7 +1304,7 @@ index 31cb54e..4d442e9 100755
  {
      ctx = glm_ctx;
 
-@@ -6368,11 +6861,38 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6368,11 +6866,38 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
 
      NSLog(@"MGL INFO: Metal command queue created successfully");
 
@@ -1337,7 +1344,7 @@ index 31cb54e..4d442e9 100755
      _layer = [[CAMetalLayer alloc] init];
      if (!_layer) {
          NSLog(@"MGL ERROR: Failed to create Metal layer");
-@@ -6382,7 +6902,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6382,7 +6907,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
      _layer.device = _device;
      _layer.pixelFormat = ctx->pixel_format.mtl_pixel_format;
      _layer.framebufferOnly = NO; // enable blitting to main color buffer
@@ -1346,7 +1353,7 @@ index 31cb54e..4d442e9 100755
      _layer.magnificationFilter = kCAFilterNearest;
      _layer.presentsWithTransaction = NO;
 
-@@ -6396,6 +6916,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6396,6 +6921,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
      } else {
          [_view setLayer: _layer];
      }
@@ -1354,7 +1361,7 @@ index 31cb54e..4d442e9 100755
 
      mglDrawBuffer(glm_ctx, GL_FRONT);
 
-@@ -6409,7 +6930,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6409,7 +6935,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
          NSLog(@"MGL ERROR: Exception creating initial Metal command buffer: %@", exception);
      }
      
@@ -1363,7 +1370,7 @@ index 31cb54e..4d442e9 100755
 
      // PROACTIVE TEXTURE CREATION: Create essential textures to break sync loop
      NSLog(@"MGL INFO: PROACTIVE - Creating essential textures to prevent magenta screen");
-@@ -6732,6 +7253,7 @@ - (void)resetMetalState
+@@ -6732,6 +7258,7 @@ - (void)resetMetalState
 
      // Reset pipeline state
      _pipelineState = nil;
@@ -1371,7 +1378,7 @@ index 31cb54e..4d442e9 100755
      // Note: _depthStencilState would be an instance variable if it exists
 
      // Clear all cached objects
-@@ -6806,9 +7328,9 @@ - (void)commitCommandBufferWithAGXRecovery:(id<MTLCommandBuffer>)commandBuffer
+@@ -6806,9 +7333,9 @@ - (void)commitCommandBufferWithAGXRecovery:(id<MTLCommandBuffer>)commandBuffer
 
      // Commit with exception handling
      @try {
@@ -1384,7 +1391,7 @@ index 31cb54e..4d442e9 100755
          NSLog(@"MGL AGX ERROR: Command buffer commit exception: %@", exception);
          [self recordGPUError];
 diff --git a/MGL/src/buffers.c b/MGL/src/buffers.c
-index 586178d..a11b3d3 100644
+index 586178d..cf5fd04 100644
 --- a/MGL/src/buffers.c
 +++ b/MGL/src/buffers.c
 @@ -435,7 +435,7 @@ void mglDeleteBuffers(GLMContext ctx, GLsizei n, const GLuint *buffers)
@@ -1493,7 +1500,7 @@ index 586178d..a11b3d3 100644
  }
 
  void mglBindBufferBase(GLMContext ctx, GLenum target, GLuint index, GLuint buffer)
-@@ -691,10 +691,7 @@ kern_return_t initBufferData(GLMContext ctx, Buffer *ptr, GLsizeiptr size, const
+@@ -691,16 +691,13 @@ kern_return_t initBufferData(GLMContext ctx, Buffer *ptr, GLsizeiptr size, const
                  // the mtl buffer has a deallocator for the vm allocate
                  ctx->mtl_funcs.mtlDeleteMTLObj(ctx, ptr->data.mtl_data);
                  
@@ -1505,7 +1512,15 @@ index 586178d..a11b3d3 100644
              }
              else
              {
-@@ -709,12 +706,12 @@ kern_return_t initBufferData(GLMContext ctx, Buffer *ptr, GLsizeiptr size, const
+-                vm_deallocate(mach_host_self(), ptr->data.buffer_data, ptr->data.buffer_size);
++                vm_deallocate(mach_task_self(), ptr->data.buffer_data, ptr->data.buffer_size);
+             }
+-            
++
+             ptr->data.buffer_data = 0;
+             ptr->data.buffer_size = 0;
+         }
+@@ -709,13 +706,13 @@ kern_return_t initBufferData(GLMContext ctx, Buffer *ptr, GLsizeiptr size, const
              if (ptr->data.mtl_data)
              {
                  ctx->mtl_funcs.mtlDeleteMTLObj(ctx, ptr->data.mtl_data);
@@ -1515,13 +1530,15 @@ index 586178d..a11b3d3 100644
 -            {
                  ptr->data.mtl_data = NULL;
              }
+-            
 +            else {
 +                // Small buffers use set*Bytes and still own their VM backing.
 +                vm_deallocate(mach_task_self(), ptr->data.buffer_data, ptr->data.buffer_size);
 +            }
-             
++
              ptr->data.buffer_data = 0;
              ptr->data.buffer_size = 0;
+         }
 @@ -1756,4 +1753,3 @@ void mglGetNamedBufferSubData(GLMContext ctx, GLuint buffer, GLintptr offset, GL
      // Unimplemented function
      assert(0);
@@ -1915,7 +1932,7 @@ index 686cb64..c81e58d 100644
          case GL_DELETE_STATUS:
              *params = GL_FALSE;  /* Programs are not deleted by default */
 diff --git a/MGL/src/rendering.c b/MGL/src/rendering.c
-index f57f11d..5cf1c90 100644
+index f57f11d..9772ec7 100644
 --- a/MGL/src/rendering.c
 +++ b/MGL/src/rendering.c
 @@ -38,7 +38,8 @@ void mglClear(GLMContext ctx, GLbitfield mask)
@@ -1928,6 +1945,16 @@ index f57f11d..5cf1c90 100644
  }
 
  void mglClearColor(GLMContext ctx, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)
+@@ -505,7 +506,7 @@ void mglReadPixels(GLMContext ctx, GLint x, GLint y, GLsizei width, GLsizei heig
+     ctx->mtl_funcs.mtlReadDrawable(ctx, (void *)buffer_data, pitch, (GLuint)buffer_size, x, y, width, height);
+
+     memcpy(pixels, (void *)buffer_data, buffer_size);
+-    
+-    vm_deallocate(mach_host_self(), buffer_data, buffer_size);
++
++    vm_deallocate(mach_task_self(), buffer_data, buffer_size);
+ }
+
 diff --git a/MGL/src/state.c b/MGL/src/state.c
 index 383c2a0..2df35f4 100644
 --- a/MGL/src/state.c
@@ -2000,9 +2027,90 @@ index 383c2a0..2df35f4 100644
  }
 -
 diff --git a/MGL/src/textures.c b/MGL/src/textures.c
-index 93e73ca..8852b54 100644
+index 93e73ca..7f0f3b1 100644
 --- a/MGL/src/textures.c
 +++ b/MGL/src/textures.c
+@@ -32,6 +32,32 @@
+
+ extern void *getBufferData(GLMContext ctx, Buffer *ptr);
+
++// Release backing storage without discarding the texture's identity/parameters.
++static void releaseTextureStorage(GLMContext ctx, Texture *tex)
++{
++    if (tex->mtl_data) {
++        ctx->mtl_funcs.mtlDeleteMTLObj(ctx, tex->mtl_data);
++        tex->mtl_data = NULL;
++    }
++    if (tex->params.mtl_data) {
++        ctx->mtl_funcs.mtlDeleteMTLObj(ctx, tex->params.mtl_data);
++        tex->params.mtl_data = NULL;
++    }
++    for (int face = 0; face < _CUBE_MAP_MAX_FACE; ++face) {
++        TextureLevel *levels = tex->faces[face].levels;
++        if (!levels) continue;
++        for (GLuint i = 0; i < tex->mipmap_levels; ++i) {
++            if (levels[i].data && levels[i].data_size)
++                vm_deallocate(mach_task_self(), levels[i].data, levels[i].data_size);
++        }
++        free(levels);
++        tex->faces[face].levels = NULL;
++    }
++    tex->num_levels = 0;
++    tex->mipmap_levels = 0;
++    tex->complete = false;
++}
++
+ bool texSubImage(GLMContext ctx, Texture *tex, GLuint face, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, void *pixels);
+
+ GLuint textureIndexFromTarget(GLMContext ctx, GLenum target)
+@@ -422,10 +448,9 @@ void mglDeleteTextures(GLMContext ctx, GLsizei n, const GLuint *textures)
+                 }
+             }
+
+-            if (tex->mtl_data)
+-            {
+-                ctx->mtl_funcs.mtlDeleteMTLObj(ctx, tex->mtl_data);
+-            }
++            // Keep the object shell for any existing FBO references, but release
++            // CPU mip storage and the retained sampler as well as Metal texture.
++            releaseTextureStorage(ctx, tex);
+         }
+     }
+ }
+@@ -600,32 +625,7 @@ static size_t page_size_align(size_t size)
+
+ void invalidateTexture(GLMContext ctx, Texture *tex)
+ {
+-    if (tex->mtl_data)
+-    {
+-        ctx->mtl_funcs.mtlDeleteMTLObj(ctx, tex->mtl_data);
+-    }
+-
+-    for(int face=0; face<_CUBE_MAP_MAX_FACE; face++)
+-    {
+-        for(int i=0; i<tex->num_levels; i++)
+-        {
+-            if (tex->faces[face].levels[i].complete)
+-            {
+-                if (tex->faces[face].levels[i].data)
+-                {
+-                    vm_deallocate(mach_host_self(), tex->faces[face].levels[i].data, tex->faces[face].levels[i].data);
+-                }
+-            }
+-        }
+-    }
+-
+-    for(int i=0; i<6; i++)
+-    {
+-        if (tex->faces[i].levels)
+-            free(tex->faces[i].levels);
+-    }
+-
+-    bzero(tex, sizeof(Texture));
++    releaseTextureStorage(ctx, tex);
+ }
+
+ void initBaseTexLevel(GLMContext ctx, Texture *tex, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth)
 @@ -1222,7 +1222,9 @@ bool createTextureLevel(GLMContext ctx, Texture *tex, GLuint face, GLint level,
      {
          case MTLPixelFormatDepth16Unorm:
@@ -2013,7 +2121,20 @@ index 93e73ca..8852b54 100644
          case MTLPixelFormatDepth32Float_Stencil8:
              tex->mtl_requires_private_storage = true;
              break;
-@@ -2511,4 +2513,3 @@ void mglSampleCoverage(GLMContext ctx, GLfloat value, GLboolean invert)
+@@ -1234,6 +1236,12 @@ bool createTextureLevel(GLMContext ctx, Texture *tex, GLuint face, GLint level,
+
+     if (tex->mtl_requires_private_storage == false)
+     {
++        // glTexImage can redefine an existing mip with identical dimensions.
++        TextureLevel *oldLevel = &tex->faces[face].levels[level];
++        if (oldLevel->data && oldLevel->data_size)
++            vm_deallocate(mach_task_self(), oldLevel->data, oldLevel->data_size);
++        oldLevel->data = 0;
++        oldLevel->data_size = 0;
+         // Allocate directly from VM
+         err = vm_allocate((vm_map_t) mach_task_self(),
+                           (vm_address_t*) &texture_data,
+@@ -2511,4 +2519,3 @@ void mglSampleCoverage(GLMContext ctx, GLfloat value, GLboolean invert)
      // Stub - sample coverage is a hint for multisampling
      fprintf(stderr, "MGL: glSampleCoverage called (stub) value=%f invert=%d\n", value, invert);
  }

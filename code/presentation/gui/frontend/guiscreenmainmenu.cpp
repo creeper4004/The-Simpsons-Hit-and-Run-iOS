@@ -27,6 +27,12 @@
 
 #include <constants/movienames.h>
 #include <data/gamedatamanager.h>
+#ifdef RAD_IOS
+#include <data/memcard/memorycardmanager.h>
+#include <stdio.h>
+extern "C" void iOSDiagnosticEvent(const char*, const char*);
+static bool s_iosStartupSaveChecked = false;
+#endif
 #include <data/PersistentWorldManager.h>
 #include <events/eventmanager.h>
 #include <input/inputmanager.h>
@@ -168,6 +174,9 @@ CGuiScreenMainMenu::CGuiScreenMainMenu
     m_tvFrame( NULL )
 {
 MEMTRACK_PUSH_GROUP( "CGUIScreenMainMenu" );
+#ifdef RAD_IOS
+    m_iosStartupLoadPending = false;
+#endif
     memset( m_glowingItems, 0, sizeof( m_glowingItems ) );
 
     // Retrieve the Scrooby drawing elements.
@@ -481,10 +490,18 @@ void CGuiScreenMainMenu::HandleMessage
 
     if( m_state == GUI_WINDOW_STATE_RUNNING )
     {
+#ifdef RAD_IOS
+        // Keep this screen alive until the asynchronous load callback returns.
+        if (m_iosStartupLoadPending && message != GUI_MSG_UPDATE)
+            return;
+#endif
         switch( message )
         {
             case GUI_MSG_UPDATE:
             {
+#ifdef RAD_IOS
+                this->TryStartupSaveLoad();
+#endif
                 this->UpdateRunning( param1 );
 
                 break;
@@ -746,6 +763,44 @@ void CGuiScreenMainMenu::HandleMessage
 	//
 	CGuiScreen::HandleMessage( message, param1, param2 );
 }
+
+#ifdef RAD_IOS
+void CGuiScreenMainMenu::TryStartupSaveLoad()
+{
+    if (s_iosStartupSaveChecked || m_iosStartupLoadPending) return;
+    if (GetGameDataManager()->IsGameLoaded()) {
+        s_iosStartupSaveChecked = true;
+        this->InitMenu();
+        return;
+    }
+    MemoryCardManager* cards = GetMemoryCardManager();
+    if (cards->GetCurrentDriveIndex() == -1 || !cards->IsCurrentDriveReady(true))
+        return; // Drive initialization is asynchronous; retry on the next update.
+    s_iosStartupSaveChecked = true;
+    unsigned int slot = 0;
+    radDate stamp = {};
+    if (!GetGameDataManager()->FindMostRecentSaveGame(cards->GetCurrentDrive(), slot, stamp)) {
+        iOSDiagnosticEvent("startup-save", "result=no-valid-save");
+        return;
+    }
+    char detail[80];
+    snprintf(detail, sizeof(detail), "action=load slot=%u", slot);
+    iOSDiagnosticEvent("startup-save", detail);
+    m_iosStartupLoadPending = true;
+    GetGameDataManager()->LoadGame(slot, this);
+}
+
+void CGuiScreenMainMenu::OnLoadGameComplete(radFileError errorCode)
+{
+    m_iosStartupLoadPending = false;
+    char detail[80];
+    snprintf(detail, sizeof(detail), "action=complete error=%d", (int)errorCode);
+    iOSDiagnosticEvent("startup-save", detail);
+    if (errorCode != Success) GetGameDataManager()->ResetGame();
+    this->InitMenu();
+    this->TurnOnGlowItems(1 << m_pMenu->GetSelectionValue(MENU_ITEM_MAIN_MENU));
+}
+#endif
 
 void
 CGuiScreenMainMenu::InitMenu()

@@ -19,7 +19,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>0.93</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>2</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arm64</string>
@@ -48,6 +48,10 @@
 		<true/>
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<!-- Xcode 27 / iOS 18+ SDK requiere el ciclo de vida por escenas.
 	     SDL2 (uikit) no es scene-based por defecto; usamos un scene delegate

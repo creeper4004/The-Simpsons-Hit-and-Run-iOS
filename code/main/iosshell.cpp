@@ -27,6 +27,7 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <mach/mach.h>
+#include <malloc/malloc.h>
 #include <sys/stat.h>
 #include <TargetConditionals.h>
 #include <atomic>
@@ -143,7 +144,7 @@ extern "C" void iOSInitializePersistentDiagnostics()
     if (!s_healthLog.Open(docs, 4 * 1024 * 1024))
         fprintf(stderr, "IOS_DIAGNOSTIC_ERROR health-log-open errno=%d directory=%s\n", errno, docs);
     char session[256];
-    snprintf(session, sizeof(session), "epoch=%ld pid=%d simulator=%d", (long)time(NULL), getpid(), TARGET_OS_SIMULATOR);
+    snprintf(session, sizeof(session), "epoch=%ld pid=%d simulator=%d build=%s_%s", (long)time(NULL), getpid(), TARGET_OS_SIMULATOR, __DATE__, __TIME__);
     iOSDiagnosticEvent("session-start", session);
     iOSStartHealthMonitor();
     char path[1024];
@@ -201,17 +202,30 @@ extern "C" void iOSSampleRuntimeHealth()
     count = TASK_THREAD_TIMES_INFO_COUNT;
     kern_return_t cpuResult = task_info(mach_task_self(), TASK_THREAD_TIMES_INFO,
                                       reinterpret_cast<task_info_t>(&times), &count);
-    char health[768];
+    malloc_statistics_t allocations = {};
+    malloc_zone_statistics(NULL, &allocations);
+    char health[1024];
     snprintf(health, sizeof(health),
-             "epoch=%ld context=%d input=%u vm_status=%d basic_status=%d cpu_status=%d footprint_bytes=%llu resident_bytes=%llu resident_peak_bytes=%llu virtual_bytes=%llu user_us=%llu system_us=%llu",
+             "epoch=%ld context=%d input=%u vm_status=%d basic_status=%d cpu_status=%d footprint_bytes=%llu resident_bytes=%llu resident_peak_bytes=%llu virtual_bytes=%llu user_us=%llu system_us=%llu internal_bytes=%llu external_bytes=%llu compressed_bytes=%llu reusable_bytes=%llu malloc_inuse_bytes=%llu malloc_blocks=%llu",
              (long)time(NULL), s_gameContext.load(), s_inputState.load(), result, basicResult, cpuResult,
              (unsigned long long)memory.phys_footprint, (unsigned long long)memory.resident_size,
              (unsigned long long)basic.resident_size_max, (unsigned long long)basic.virtual_size,
              (unsigned long long)times.user_time.seconds * 1000000 + times.user_time.microseconds,
-             (unsigned long long)times.system_time.seconds * 1000000 + times.system_time.microseconds);
+             (unsigned long long)times.system_time.seconds * 1000000 + times.system_time.microseconds,
+             (unsigned long long)memory.internal, (unsigned long long)memory.external,
+             (unsigned long long)memory.compressed, (unsigned long long)memory.reusable,
+             (unsigned long long)allocations.size_in_use, (unsigned long long)allocations.blocks_in_use);
     iOSDiagnosticEvent("health", health);
     s_healthLog.Flush();
 
+}
+
+void iOSMissionDiagnostic(const char* phase, const char* mission)
+{
+    char detail[256];
+    snprintf(detail, sizeof(detail), "epoch=%ld phase=%s mission=%s", (long)time(NULL), phase, mission);
+    iOSDiagnosticEvent("mission", detail);
+    iOSSampleRuntimeHealth();
 }
 
 static void TerminateHandler()

@@ -1,5 +1,48 @@
 # iOS save and rendering diagnostics
 
+## Current phone build: save startup and shareable logs
+
+The iOS app now exposes Documents through Files → On My iPhone → Simpsons Hit &
+Run. Share `srr2_health.log` and `srr2_console.log` after an exit, before relaunching;
+after a relaunch, share the matching `.previous.log` files as well. The crash text
+file is append-only and may describe an older run; compare its time with the
+`session-start` and health records. Logs need no environment flags.
+
+At the first running main menu per launch, iOS waits for its save drive, locates
+the most recent save with a valid header, and asynchronously loads it. The menu
+then defaults to Resume Game. With no valid save, New Game remains the default.
+A failed load returns to the menu and is recorded as a `startup-save` event.
+Verified a simulator launch with existing saves: slot 1 (the second slot) was
+selected, the callback returned error 0, and a screenshot shows Resume Game as
+the initial menu choice. Both simulator and signed iPhone Release builds succeed.
+Returning to the frontend later in the same process does not reload an older
+save over current progress. This loads saved progress, not unsaved mission state.
+
+Health records now include internal/external/compressed/reusable VM bytes and
+malloc bytes/block count. `mission` events bracket initialization and cleanup
+with immediate health snapshots. Session headers include the compiled build time.
+
+## Mission-transition memory investigation (2026-10-09)
+
+Retrieved the latest phone logs directly from the app container. The five-minute
+session ended while loading level01/m1 assets: last footprint 3,523,104,936 bytes,
+while reported Metal allocations were 96,354,304 bytes. No crash report for this
+session was available; the accessible JetsamEvent predates it. Memory pressure is
+plausible, but this evidence does not prove the termination reason.
+
+Fixed a dynamic-buffer ownership error: a small buffer copied into Metal retained
+its original VM page, which subsequent buffer orphaning did not free. The CPU
+pointer now follows Metal's storage after releasing the original allocation.
+Also corrected VM deallocation task/size, released CPU mip data and samplers on
+texture deletion, and released old mip storage on same-size redefinitions.
+
+A normal simulator run with the buffer correction passed the existing health
+checker: only +1.73 MiB across 45 settled seconds in context 10, peak 253 MiB.
+The full renderer changes pass all 24 pixel assertions and a 60-second app soak.
+This has not yet reproduced completing mission one and starting mission two on
+the phone. Evidence is in `/tmp/shar-phone-mission-crash-20261009/` and
+`/tmp/shar-memory-ui-regression-20261009/`.
+
 Set `IOS_RUNTIME_DIAG=1` in the simulator process to write a bounded trace to
 `Documents/srr2_runtime_diag.txt`. The trace covers save-drive readiness,
 save UI selection/callbacks, HUD/map visibility, touch-HUD profile changes,
