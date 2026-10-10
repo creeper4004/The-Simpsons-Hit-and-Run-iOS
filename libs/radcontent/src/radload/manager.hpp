@@ -95,6 +95,10 @@ protected:
     IRadThread* m_pThread;
     IRadThreadSemaphore* m_pSemaphore;
     IRadThreadMutex* m_pMutex;
+#ifdef RAD_IOS
+    IRadThreadSemaphore* m_pLoaderTurn;
+    IRadThreadSemaphore* m_pMainTurn;
+#endif
 };
 
 #endif

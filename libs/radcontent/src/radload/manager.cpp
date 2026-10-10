@@ -79,6 +79,10 @@ m_pMutex( NULL )
 
     ::radThreadCreateMutex( &m_pMutex );
     m_pMutex->Lock();
+#ifdef RAD_IOS
+    ::radThreadCreateSemaphore(&m_pLoaderTurn, 0);
+    ::radThreadCreateSemaphore(&m_pMainTurn, 0);
+#endif
     ::radThreadCreateThread( &m_pThread, radLoadManager::LoadThreadEntry, static_cast<void*>(this), IRadThread::PriorityNormal, init.loadThreadStackSize );
 
 #ifdef RADLOAD_GATHER_STATS
@@ -166,6 +170,9 @@ radLoadFileLoader* radLoadManager::GetFileLoader( const char* extension )
 
 void radLoadManager::InternalService()
 {
+#ifdef RAD_IOS
+    m_pLoaderTurn->Wait();
+#endif
     m_pMutex->Lock();
     while( !m_bDone )
     {
@@ -385,9 +392,29 @@ void radLoadManager::SetSyncLoading( bool sync )
 
 void radLoadManager::SwitchTasks()
 {
+#ifdef RAD_IOS
+    // Sleep(0) is only a scheduler hint: the caller can immediately retake
+    // the mutex, starving the loader for seconds on a busy physical phone.
+    // Hand off exactly one cooperative slice while retaining serialized
+    // engine/renderer access. File waits and parsing both yield through here.
+    const bool loaderThread = radThreadGetActiveThread() == m_pThread;
+    m_pMutex->Unlock();
+    if (loaderThread)
+    {
+        m_pMainTurn->Signal();
+        m_pLoaderTurn->Wait();
+    }
+    else
+    {
+        m_pLoaderTurn->Signal();
+        m_pMainTurn->Wait();
+    }
+    m_pMutex->Lock();
+#else
     m_pMutex->Unlock();
     radThreadSleep(0);
     m_pMutex->Lock();
+#endif
 }
 
 void radLoadManager::Terminate()
@@ -399,8 +426,16 @@ void radLoadManager::Terminate()
     m_pCallbacks->Release();
     m_bDone = true;
     m_pMutex->Unlock();
+#ifdef RAD_IOS
+    // Release the parked worker so it can observe termination and exit.
+    m_pLoaderTurn->Signal();
+#endif
     m_pThread->WaitForTermination();
     m_pThread->Release();
+#ifdef RAD_IOS
+    m_pLoaderTurn->Release();
+    m_pMainTurn->Release();
+#endif
 
     m_pMutex->Release();
 

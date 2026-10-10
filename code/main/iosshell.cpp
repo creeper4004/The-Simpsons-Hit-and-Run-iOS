@@ -277,3 +277,34 @@ namespace srr2_ios {
     }
 }
 #endif
+
+#if defined(RAD_IOS)
+// Main-thread aggregate: bounded diagnostic traffic, never a record per frame.
+extern "C" void iOSFrameTimings(unsigned long long updateUs, unsigned long long renderUs,
+                                unsigned long long fileUs, unsigned long long soundUs,
+                                unsigned long long loadUs)
+{
+    static unsigned frames = 0;
+    static unsigned long long sums[5] = {}, maxima[5] = {};
+    static time_t reportTime = 0;
+    const unsigned long long values[5] = {updateUs, renderUs, fileUs, soundUs, loadUs};
+    ++frames;
+    for (int i = 0; i < 5; ++i) {
+        sums[i] += values[i];
+        if (values[i] > maxima[i]) maxima[i] = values[i];
+    }
+    time_t now = time(NULL);
+    if (!reportTime) reportTime = now;
+    if (now == reportTime) return;
+    char detail[768];
+    snprintf(detail, sizeof(detail), "epoch=%ld context=%d frames=%u update_avg_us=%llu update_max_us=%llu render_avg_us=%llu render_max_us=%llu file_avg_us=%llu file_max_us=%llu sound_avg_us=%llu sound_max_us=%llu load_avg_us=%llu load_max_us=%llu",
+             (long)now, s_gameContext.load(), frames,
+             sums[0]/frames, maxima[0], sums[1]/frames, maxima[1], sums[2]/frames, maxima[2],
+             sums[3]/frames, maxima[3], sums[4]/frames, maxima[4]);
+    iOSDiagnosticEvent("frame-phases", detail);
+    frames = 0;
+    memset(sums, 0, sizeof(sums));
+    memset(maxima, 0, sizeof(maxima));
+    reportTime = now;
+}
+#endif

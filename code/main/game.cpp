@@ -73,6 +73,7 @@
 #include <stdio.h>
 extern "C" const char* iOSGetDocumentsDir(void);
 extern "C" void iOSProgress(const char* stage);
+extern "C" void iOSFrameTimings(unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long);
 extern "C" void iOSUpdateDiagnosticContext(int context, unsigned inputState);
 extern "C" void* iOSBeginFrameAutoreleasePool();
 extern "C" void iOSEndFrameAutoreleasePool(void*);
@@ -922,6 +923,8 @@ void Game::Run()
     {
 #ifdef RAD_IOS
         IosFrameAutoreleasePool framePool;
+        radTime64 updateUs = 0, renderUs = 0;
+        radTime64 phaseStart = 0, fileUs = 0, soundUs = 0;
 #endif
         DEMOPROFILE( g_DemoProfiler.Start(PROFILE_CHANNEL_ALL); )
 
@@ -985,14 +988,26 @@ void Game::Run()
         if ( !mpPlatform->PausedForErrors() )
         {
             DEMOPROFILE( g_DemoProfiler.Start(PROFILE_CHANNEL_AI); )
+#ifdef RAD_IOS
+            phaseStart = radTimeGetMicroseconds64();
+#endif
             mpTimerList->Service(); //nv
             mpGameFlow->OnTimerDone(elapsed, NULL);
+#ifdef RAD_IOS
+            updateUs = radTimeGetMicroseconds64() - phaseStart;
+#endif
             DEMOPROFILE( g_DemoProfiler.Stop(PROFILE_CHANNEL_AI); )
 
             if( !mExitNow )
             {
                 DEMOPROFILE( g_DemoProfiler.Start(PROFILE_CHANNEL_RENDER); )
+#ifdef RAD_IOS
+                phaseStart = radTimeGetMicroseconds64();
+#endif
                 mpRenderFlow->OnTimerDone(elapsed, NULL);
+#ifdef RAD_IOS
+                renderUs = radTimeGetMicroseconds64() - phaseStart;
+#endif
                 DEMOPROFILE( g_DemoProfiler.Stop(PROFILE_CHANNEL_RENDER); )
             }
         }
@@ -1013,7 +1028,13 @@ void Game::Run()
         //
         // Service FTech subsystems.
         //
+#ifdef RAD_IOS
+        phaseStart = radTimeGetMicroseconds64();
+#endif
         ::radFileService();
+#ifdef RAD_IOS
+        fileUs = radTimeGetMicroseconds64() - phaseStart;
+#endif
         ::radDbgComService();
         ::radDebugConsoleService();
         
@@ -1025,6 +1046,9 @@ void Game::Run()
         //
         // Service the sound renderer.
         //
+#ifdef RAD_IOS
+        phaseStart = radTimeGetMicroseconds64();
+#endif
         SoundManager::GetInstance()->Update();
 
         if ( mpPlatform->PausedForErrors() )
@@ -1037,6 +1061,10 @@ void Game::Run()
             SoundManager::GetInstance()->UpdateOncePerFrame( 0, NUM_CONTEXTS, false, true );
         }
 
+#ifdef RAD_IOS
+        soundUs = radTimeGetMicroseconds64() - phaseStart;
+        phaseStart = radTimeGetMicroseconds64();
+#endif
         //
         // Spin Pure3D async loading.
         //
@@ -1068,6 +1096,9 @@ void Game::Run()
                 p3d::loadManager->SwitchTask();
             }
         }
+#endif
+#ifdef RAD_IOS
+        iOSFrameTimings(updateUs, renderUs, fileUs, soundUs, radTimeGetMicroseconds64() - phaseStart);
 #endif
         DEMOPROFILE( g_DemoProfiler.Stop(PROFILE_CHANNEL_LOAD); )
 
