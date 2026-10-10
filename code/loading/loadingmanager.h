@@ -149,6 +149,9 @@ class LoadingManager : public FileHandler::LoadFileCallback
             char filename[LOADING_FILENAME_LENGTH];
             FileHandler* pFileHandler;
             unsigned int startTime;
+#ifdef RAD_IOS
+            unsigned int queuedTime;
+#endif
             GameMemoryAllocator heap;
             ProcessRequestsCallback* pCallback;
             void* pUserData;

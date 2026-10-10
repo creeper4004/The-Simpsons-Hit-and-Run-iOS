@@ -288,6 +288,9 @@ void LoadingManager::AddRequest
 #endif
     
     mRequests[mRequestTail].heap = heap;
+#ifdef RAD_IOS
+    mRequests[mRequestTail].queuedTime = radTimeGetMilliseconds();
+#endif
     mRequests[mRequestTail].pCallback = pCallback;
     mRequests[mRequestTail].pUserData = pUserData;
     mRequestTail = newTail;
@@ -315,6 +318,9 @@ void LoadingManager::OnLoadFileComplete( void* pUserData )
         // record the file that just finished loading
         static char buf[ 512 ];
         LoadingRequest& req = mRequests[mRequestHead];
+        extern void iOSLoadTiming(const char*, const char*, unsigned, unsigned, int);
+        iOSLoadTiming("complete", req.filename, req.startTime - req.queuedTime,
+                      radTimeGetMilliseconds() - req.startTime, GetNumCurrentRequests());
         if (getenv("IOS_ATTRIB_PROBE"))
             fprintf(stderr, "IOS_LOAD_COMPLETE name=%s duration_ms=%u uptime_ms=%u\n",
                     req.filename, radTimeGetMilliseconds() - req.startTime, radTimeGetMilliseconds());
@@ -648,6 +654,11 @@ void LoadingManager::ProcessNextRequest()
 #endif
 
                 request.startTime = radTimeGetMilliseconds();
+#ifdef RAD_IOS
+                extern void iOSLoadTiming(const char*, const char*, unsigned, unsigned, int);
+                iOSLoadTiming("start", request.filename, request.startTime - request.queuedTime,
+                              0, GetNumCurrentRequests());
+#endif
                 mLoading = true;
                 GameMemoryAllocator heap = request.heap;
 

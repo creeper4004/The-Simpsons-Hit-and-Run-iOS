@@ -38,6 +38,11 @@ public:
 
 protected:
 
+#ifdef RAD_IOS
+    unsigned long long ioWaitUs;
+    unsigned ioWaitYields;
+    unsigned parseYields;
+#endif
     IRadFile*    m_pIRadFile;
     int fileSize;
     int compressedFileSize;

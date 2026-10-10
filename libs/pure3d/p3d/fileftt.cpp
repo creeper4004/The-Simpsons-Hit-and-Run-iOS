@@ -11,12 +11,21 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef RAD_IOS
+// Two fixed buffers: reduce streaming I/O round trips without per-file allocations.
+static const int CACHE_SIZE = 768 * 1024;
+extern "C" void iOSDiagnosticEvent(const char*, const char*);
+#else
 static const int CACHE_SIZE = 192 * 1024;
+#endif
 static const int CYCLE_SIZE = 8192;
 static const int COMPRESSED_BLOCK_SIZE = 4096;
 
 static radTime64 gLastTime = 0;
-#ifdef RAD_XBOX
+#if defined(RAD_IOS)
+// Keep each cooperative parsing slice within the gameplay streaming budget.
+static const unsigned gYieldTime = 2000;
+#elif defined(RAD_XBOX)
 static const unsigned gYieldTime = 2500;  // microseconds
 #else
 static const unsigned gYieldTime = 5200;  // microseconds
@@ -56,6 +65,11 @@ tFileFTT::tFileFTT(const char* filename, bool synchronous) :
      nextSize(0),
      bufferSize(0)
 {
+#ifdef RAD_IOS
+    ioWaitUs = 0;
+    ioWaitYields = 0;
+    parseYields = 0;
+#endif
     SetFilename(filename);
     rAssert(!synchronous);
     uncompressedcache = NULL;
@@ -64,6 +78,13 @@ tFileFTT::tFileFTT(const char* filename, bool synchronous) :
 //--------------------------------------------------------------------------
 tFileFTT::~tFileFTT()
 {
+#ifdef RAD_IOS
+    char detail[512];
+    snprintf(detail, sizeof(detail), "file=%s size=%d position=%d io_wait_us=%llu io_wait_yields=%u parse_yields=%u cache_bytes=%d",
+             GetFilename(), fileSize, position, (unsigned long long)ioWaitUs,
+             ioWaitYields, parseYields, CACHE_SIZE);
+    iOSDiagnosticEvent("p3d-stream", detail);
+#endif
     if(m_pIRadFile != NULL)
     {
         m_pIRadFile->Release( );
@@ -157,7 +178,7 @@ void tFileFTT::OnFileOperationsComplete(void*)
 void tFileFTT::WaitForCompletion( void )
 {
     int i = 0;
-    unsigned int time = radTimeGetMicroseconds64();
+    radTime64 time = radTimeGetMicroseconds64();
     while(!m_pIRadFile->CheckForCompletion())
     {
         i++;
@@ -167,7 +188,11 @@ void tFileFTT::WaitForCompletion( void )
     if(i>0)
     {
         time = radTimeGetMicroseconds64()-time;
-        rReleasePrintf("P3D Loading Starved for %d frames, %d ms\n",i,(time/1000));
+#ifdef RAD_IOS
+        ioWaitUs += time;
+        ioWaitYields += i;
+#endif
+        rReleasePrintf("P3D Loading Starved for %d frames, %llu ms\n",i,(unsigned long long)(time/1000));
     }
 }
 
@@ -229,6 +254,9 @@ bool tFileFTT::GetData(void* buf, unsigned count, DataType type)
     radTime64 elapsed = now - gLastTime;
     if( elapsed >= gYieldTime )
     {
+#ifdef RAD_IOS
+        ++parseYields;
+#endif
         p3d::loadManager->SwitchTask();
         gLastTime = radTimeGetMicroseconds64();
     }
@@ -313,6 +341,9 @@ void tFileFTT::Decompress (const unsigned char* input, unsigned int inputsize,
         radTime64 elapsed = now - gLastTime;
         if( elapsed >= gYieldTime )
         {
+#ifdef RAD_IOS
+            ++parseYields;
+#endif
             p3d::loadManager->SwitchTask();
             gLastTime = radTimeGetMicroseconds64();
         }

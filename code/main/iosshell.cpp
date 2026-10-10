@@ -228,6 +228,14 @@ void iOSMissionDiagnostic(const char* phase, const char* mission)
     iOSSampleRuntimeHealth();
 }
 
+void iOSLoadTiming(const char* phase, const char* file, unsigned waitMs, unsigned loadMs, int queued)
+{
+    char detail[512];
+    snprintf(detail, sizeof(detail), "epoch=%ld phase=%s file=%s queue_wait_ms=%u load_ms=%u queued=%d",
+             (long)time(NULL), phase, file, waitMs, loadMs, queued);
+    iOSDiagnosticEvent("load-timing", detail);
+}
+
 static void TerminateHandler()
 {
     void* frames[ 64 ];

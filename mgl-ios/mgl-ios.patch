@@ -77,7 +77,7 @@ index 4a6f0f7..8adb2e5 100644
          unsigned x, y, z;
      } local_workgroup_size;
 diff --git a/MGL/src/MGLRenderer.m b/MGL/src/MGLRenderer.m
-index 31cb54e..663acf4 100755
+index 31cb54e..788a987 100755
 --- a/MGL/src/MGLRenderer.m
 +++ b/MGL/src/MGLRenderer.m
 @@ -35,6 +35,21 @@
@@ -933,7 +933,7 @@ index 31cb54e..663acf4 100755
          return;
      }
 
-@@ -4948,6 +5169,47 @@ void mtlFlush (GLMContext glm_ctx, bool finish)
+@@ -4948,6 +5169,51 @@ void mtlFlush (GLMContext glm_ctx, bool finish)
  #pragma mark C interface to mtlSwapBuffers
  -(void) mtlSwapBuffers:(GLMContext) glm_ctx
  {
@@ -945,6 +945,7 @@ index 31cb54e..663acf4 100755
 +        static double lastFrameTime;
 +        static double frameDurationSumMs;
 +        static double frameDurationMaxMs;
++        static unsigned long hitches33, hitches50;
 +        double now = [[NSProcessInfo processInfo] systemUptime];
 +        ++frameCount;
 +        ++framesInReport;
@@ -955,15 +956,17 @@ index 31cb54e..663acf4 100755
 +            double frameDurationMs = (now - lastFrameTime) * 1000.0;
 +            frameDurationSumMs += frameDurationMs;
 +            if (frameDurationMs > frameDurationMaxMs) frameDurationMaxMs = frameDurationMs;
++            if (frameDurationMs > 33.33) ++hitches33;
++            if (frameDurationMs > 50.0) ++hitches50;
 +        }
 +        lastFrameTime = now;
 +        if (now - lastReport >= 1.0) {
 +            double reportDuration = now - lastReport;
 +            double fps = framesInReport / reportDuration;
 +            double averageFrameMs = framesInReport > 1 ? frameDurationSumMs / (framesInReport - 1) : 0.0;
-+            char report[512];
-+            snprintf(report, sizeof(report), "frame=%lu fps=%.1f avg_ms=%.2f max_ms=%.2f draws=%lu pipelines=%lu viewport=%dx%d clear=0x%x depth_attachment=%lu stencil_attachment=%lu command_status=%ld gpu_allocated_bytes=%llu",
-+                     frameCount, fps, averageFrameMs, frameDurationMaxMs,
++            char report[640];
++            snprintf(report, sizeof(report), "epoch=%ld uptime_ms=%.0f frame=%lu fps=%.1f avg_ms=%.2f max_ms=%.2f hitches33=%lu hitches50=%lu draws=%lu pipelines=%lu viewport=%dx%d clear=0x%x depth_attachment=%lu stencil_attachment=%lu command_status=%ld gpu_allocated_bytes=%llu",
++                     (long)time(NULL), now * 1000.0, frameCount, fps, averageFrameMs, frameDurationMaxMs, hitches33, hitches50,
 +                     iosDrawCount - lastDrawCount, (unsigned long)_pipelineCache.count,
 +                     ctx->state.viewport[2], ctx->state.viewport[3], ctx->state.clear_bitmask,
 +                     (unsigned long)_renderPassDescriptor.depthAttachment.texture.pixelFormat,
@@ -974,6 +977,7 @@ index 31cb54e..663acf4 100755
 +            framesInReport = 0;
 +            frameDurationSumMs = 0.0;
 +            frameDurationMaxMs = 0.0;
++            hitches33 = hitches50 = 0;
 +            lastDrawCount = iosDrawCount;
 +            lastReport = now;
 +        }
@@ -981,7 +985,7 @@ index 31cb54e..663acf4 100755
      if (ctx->state.draw_buffer == GL_FRONT || ctx->state.draw_buffer == GL_COLOR_ATTACHMENT0)
      {
          // clear commands rely on processGLState
-@@ -5054,7 +5316,9 @@ -(void) mtlSwapBuffers:(GLMContext) glm_ctx
+@@ -5054,7 +5320,9 @@ -(void) mtlSwapBuffers:(GLMContext) glm_ctx
          _drawable = [_layer nextDrawable];
          if (_drawable == NULL) {
              NSLog(@"MGL WARNING: Failed to get next drawable in mtlSwapBuffers");
@@ -992,7 +996,7 @@ index 31cb54e..663acf4 100755
              return;
          }
          
-@@ -5131,7 +5395,9 @@ -(void) mtlBufferSubData:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_t)o
+@@ -5131,7 +5399,9 @@ -(void) mtlBufferSubData:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_t)o
      data = mtl_buffer.contents;
      memcpy(data+offset, ptr, size);
 
@@ -1002,7 +1006,7 @@ index 31cb54e..663acf4 100755
  }
 
  void mtlBufferSubData(GLMContext glm_ctx, Buffer *buf, size_t offset, size_t size, const void *ptr)
-@@ -5157,7 +5423,9 @@ -(void *) mtlMapUnmapBuffer:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_
+@@ -5157,7 +5427,9 @@ -(void *) mtlMapUnmapBuffer:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_
          return mtl_buffer.contents + offset;
      }
 
@@ -1012,7 +1016,7 @@ index 31cb54e..663acf4 100755
 
      return NULL;
  }
-@@ -5175,7 +5443,9 @@ -(void) mtlFlushMappedBufferRange:(GLMContext) glm_ctx buf:(Buffer *)buf offset:
+@@ -5175,7 +5447,9 @@ -(void) mtlFlushMappedBufferRange:(GLMContext) glm_ctx buf:(Buffer *)buf offset:
 
      mtl_buffer = (__bridge id<MTLBuffer>)(buf->data.mtl_data);
 
@@ -1022,7 +1026,7 @@ index 31cb54e..663acf4 100755
  }
 
  void mtlFlushBufferRange(GLMContext glm_ctx, Buffer *buf, GLintptr offset, GLsizeiptr length)
-@@ -5501,9 +5771,54 @@ MTLIndexType getMTLIndexType(GLenum type)
+@@ -5501,9 +5775,54 @@ MTLIndexType getMTLIndexType(GLenum type)
  }
 
  #pragma mark C interface to mtlDrawArrays
@@ -1077,7 +1081,7 @@ index 31cb54e..663acf4 100755
 
      // AGGRESSIVE MEMORY SAFETY: Immediate validation before any Metal operations (realistic bounds)
      if (!ctx || ((uintptr_t)ctx < 0x1000) || ((uintptr_t)ctx > 0x100000000000ULL)) {
-@@ -5515,6 +5830,21 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
+@@ -5515,6 +5834,21 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
          NSLog(@"MGL ERROR: mtlDrawArrays - processGLState failed, aborting");
          return; // Early return instead of continuing with invalid state
      }
@@ -1099,7 +1103,7 @@ index 31cb54e..663acf4 100755
 
      // Additional safety check after processGLState
      if (!_currentRenderEncoder) {
-@@ -5522,6 +5852,86 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
+@@ -5522,6 +5856,86 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
          return;
      }
 
@@ -1186,7 +1190,7 @@ index 31cb54e..663acf4 100755
      primitiveType = getMTLPrimitiveType(mode);
      assert(primitiveType != 0xFFFFFFFF);
 
-@@ -5566,11 +5976,70 @@ void mtlDrawArrays(GLMContext glm_ctx, GLenum mode, GLint first, GLsizei count)
+@@ -5566,11 +5980,70 @@ void mtlDrawArrays(GLMContext glm_ctx, GLenum mode, GLint first, GLsizei count)
  #pragma mark C interface to mtlDrawElements
  -(void) mtlDrawElements: (GLMContext) glm_ctx mode:(GLenum) mode count: (GLsizei) count type: (GLenum) type indices:(const void *)indices
  {
@@ -1257,7 +1261,7 @@ index 31cb54e..663acf4 100755
      primitiveType = getMTLPrimitiveType(mode);
      assert(primitiveType != 0xFFFFFFFF);
 
-@@ -6238,7 +6707,34 @@ - (void) bindObjFuncsToGLMContext: (GLMContext) glm_ctx
+@@ -6238,7 +6711,34 @@ - (void) bindObjFuncsToGLMContext: (GLMContext) glm_ctx
      glm_ctx->mtl_funcs.mtlDispatchComputeIndirect = mtlDispatchComputeIndirect;
  }
 
@@ -1293,7 +1297,7 @@ index 31cb54e..663acf4 100755
  {
      assert (window);
      assert (glm_ctx);
-@@ -6310,7 +6806,9 @@ - (id) createMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (NSWindow
+@@ -6310,7 +6810,9 @@ - (id) createMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (NSWindow
      return  (__bridge void *)(renderer);
  }
 
@@ -1304,7 +1308,7 @@ index 31cb54e..663acf4 100755
  {
      ctx = glm_ctx;
 
-@@ -6368,11 +6866,38 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6368,11 +6870,38 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
 
      NSLog(@"MGL INFO: Metal command queue created successfully");
 
@@ -1344,7 +1348,7 @@ index 31cb54e..663acf4 100755
      _layer = [[CAMetalLayer alloc] init];
      if (!_layer) {
          NSLog(@"MGL ERROR: Failed to create Metal layer");
-@@ -6382,7 +6907,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6382,7 +6911,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
      _layer.device = _device;
      _layer.pixelFormat = ctx->pixel_format.mtl_pixel_format;
      _layer.framebufferOnly = NO; // enable blitting to main color buffer
@@ -1353,7 +1357,7 @@ index 31cb54e..663acf4 100755
      _layer.magnificationFilter = kCAFilterNearest;
      _layer.presentsWithTransaction = NO;
 
-@@ -6396,6 +6921,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6396,6 +6925,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
      } else {
          [_view setLayer: _layer];
      }
@@ -1361,7 +1365,7 @@ index 31cb54e..663acf4 100755
 
      mglDrawBuffer(glm_ctx, GL_FRONT);
 
-@@ -6409,7 +6935,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6409,7 +6939,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
          NSLog(@"MGL ERROR: Exception creating initial Metal command buffer: %@", exception);
      }
      
@@ -1370,7 +1374,7 @@ index 31cb54e..663acf4 100755
 
      // PROACTIVE TEXTURE CREATION: Create essential textures to break sync loop
      NSLog(@"MGL INFO: PROACTIVE - Creating essential textures to prevent magenta screen");
-@@ -6732,6 +7258,7 @@ - (void)resetMetalState
+@@ -6732,6 +7262,7 @@ - (void)resetMetalState
 
      // Reset pipeline state
      _pipelineState = nil;
@@ -1378,7 +1382,7 @@ index 31cb54e..663acf4 100755
      // Note: _depthStencilState would be an instance variable if it exists
 
      // Clear all cached objects
-@@ -6806,9 +7333,9 @@ - (void)commitCommandBufferWithAGXRecovery:(id<MTLCommandBuffer>)commandBuffer
+@@ -6806,9 +7337,9 @@ - (void)commitCommandBufferWithAGXRecovery:(id<MTLCommandBuffer>)commandBuffer
 
      // Commit with exception handling
      @try {
