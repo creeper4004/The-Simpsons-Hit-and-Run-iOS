@@ -11,10 +11,43 @@ python3 mgl-ios/iosbuild/probes/capture-simulator.py \
 ```
 
 The script boots the selected simulator, installs the app if `--app` is supplied,
-records video, launches with `IOS_ATTRIB_PROBE=1`, and captures PNG frames every
-half second. It stops the app and finalizes video at the end. Defaults target
+records video, launches with lightweight `IOS_FRAME_STATS=1`, and captures PNG
+frames every half second. It stops the app and finalizes video at the end. Defaults target
 the iPhone 17 UUID in the handoff; override with `--device`, `--bundle`, and
 `--output` (a new directory). `--no-video` captures frames/logs only.
+
+Add `--runtime-diagnostics` to include the bounded save, HUD/minimap, scissor,
+depth/stencil, colour-write, material-alpha, and GLES blend-state trace in the
+same simulator process. Deep vertex/texture inspection is opt-in with
+`--attrib-probe`; this can perturb frame time and should not be used to measure
+performance. The per-draw alpha histogram is also opt-in with `--alpha-stats`
+and should be omitted from performance runs. Use the frame stats to find slow
+intervals, then inspect paired screenshots and nearby renderer events. While capture runs, bring the selected
+simulator up in Device Hub and reproduce the issue. Add an action marker at each
+visible hitch/artifact so it appears on the capture timeline:
+
+```sh
+python3 mgl-ios/iosbuild/probes/capture-simulator.py \
+  --app build_ios/code/Release-iphonesimulator/Simpsons.app \
+  --duration 180 --interval 0.5 --runtime-diagnostics \
+  --output /tmp/shar-captures/render-drive-repro
+
+# In another terminal, while the capture is running:
+python3 mgl-ios/iosbuild/probes/capture-simulator.py \
+  --output /tmp/shar-captures/render-drive-repro \
+  --mark 'Driving: frame hitch at school corner'
+```
+
+For frame drops, compare the one-second `IOS_FRAME_STATS` intervals with the
+action markers, then use Instruments' Time Profiler on the same simulator run
+if the CPU is the bottleneck. Only optimize a measured hot path; compare the
+same route and scene before/after. For black spots/overlays, pause capture at
+the artifact and compare its nearby blend/depth/scissor events and neighboring
+frames before changing renderer state.
+
+Use `--attrib-probe` only when diagnosing wrong vertex attributes, texture
+bindings, or Metal pipeline inputs. The capture tool no longer enables it by
+default, so performance numbers stay separate from deep render probes.
 
 Outputs under `/tmp/shar-captures/<timestamp>/`:
 

@@ -112,6 +112,8 @@ static void LogOutputFunction( void *userdata, int category, SDL_LogPriority pri
 // Marca de progreso para diagnosticar el arranque en dispositivo real.
 // Escribe a Documents/ (leible via `devicectl device copy from`).
 extern "C" const char* iOSGetDocumentsDir(void);
+extern "C" void iOSInitializePersistentDiagnostics();
+extern "C" void iOSDiagnosticEvent(const char*, const char*);
 extern "C" void iOSProgress(const char* stage)
 {
     const char* docs = iOSGetDocumentsDir();
@@ -126,6 +128,7 @@ extern "C" void iOSProgress(const char* stage)
         fprintf( f, "%s\n", stage );
         fclose( f );
     }
+    iOSDiagnosticEvent("progress", stage);
     // Also surface to the console so `simctl launch --console` shows it.
     fprintf( stderr, "[SRR2] %s\n", stage );
     fflush( stderr );
@@ -137,9 +140,9 @@ extern "C" void iOSProgress(const char* stage)
 extern "C" void iOSRuntimeLog(const char* subsystem, const char* message)
 {
     const char* enabled = getenv( "IOS_RUNTIME_DIAG" );
-    if( enabled == NULL || strcmp( enabled, "1" ) != 0 ) {
-        return;
-    }
+    // Always retain the bounded state trace in the dedicated health log.
+    // The environment flag only controls the legacy trace file below.
+    const bool legacyTrace = enabled != NULL && strcmp(enabled, "1") == 0;
 
     static unsigned int lineCount = 0;
     static unsigned int pddiStateLineCount = 0;
@@ -160,6 +163,8 @@ extern "C" void iOSRuntimeLog(const char* subsystem, const char* message)
         return;
 
     ++lineCount;
+    iOSDiagnosticEvent(subsystem, message);
+    if (!legacyTrace) return;
 
     const char* docs = iOSGetDocumentsDir();
     char path[ 1024 ] = { 0 };
@@ -182,6 +187,7 @@ extern "C" void iOSRuntimeLog(const char* subsystem, const char* message)
 extern "C" int main( int argc, char *argv[] )
 {
 #ifdef RAD_IOS
+    iOSInitializePersistentDiagnostics();
     iOSProgress( "main:enter" );
 #endif
 #ifdef __SWITCH__

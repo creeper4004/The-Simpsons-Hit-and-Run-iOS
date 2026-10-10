@@ -75,6 +75,12 @@ def main():
     parser.add_argument("--app", type=Path, help="Install this simulator .app before launch")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--no-video", action="store_true")
+    parser.add_argument("--runtime-diagnostics", action="store_true",
+                        help="Enable bounded iOS save/render state trace")
+    parser.add_argument("--attrib-probe", action="store_true",
+                        help="Enable deep MGL vertex/texture probes; avoid for performance runs")
+    parser.add_argument("--alpha-stats", action="store_true",
+                        help="Enable per-draw alpha histogram logging; avoid for performance runs")
     parser.add_argument("--mark", help="Add a timed input/action note to an existing --output capture")
     parser.add_argument("--report-only", action="store_true", help="Regenerate timeline for an existing --output capture")
     args = parser.parse_args()
@@ -90,7 +96,15 @@ def main():
     if args.mark:
         if not args.output:
             parser.error("--mark requires --output")
-        start = json.loads((args.output / "capture-start.json").read_text())
+        start_file = args.output / "capture-start.json"
+        if not start_file.is_file():
+            parser.error(
+                f"no capture metadata at {start_file}; start a simulator capture first, "
+                "then pass the same --output directory to --mark. This helper records "
+                "simulator captures only; for a phone test, send the event description "
+                "here and its time will be matched against the device runtime log."
+            )
+        start = json.loads(start_file.read_text())
         wall = utc()
         elapsed = (datetime.datetime.fromisoformat(wall) - datetime.datetime.fromisoformat(start["started_utc"])).total_seconds()
         # Python 3.9 on macOS does not share the monotonic clock origin between
@@ -122,7 +136,13 @@ def main():
     video = None if args.no_video else subprocess.Popen(
         ["xcrun", "simctl", "io", args.device, "recordVideo", "--codec=h264", str(directory / "boot.mp4")],
         stdout=video_log, stderr=video_log)
-    environment = dict(os.environ, SIMCTL_CHILD_IOS_ATTRIB_PROBE="1")
+    environment = dict(os.environ, SIMCTL_CHILD_IOS_FRAME_STATS="1")
+    if args.attrib_probe:
+        environment["SIMCTL_CHILD_IOS_ATTRIB_PROBE"] = "1"
+    if args.runtime_diagnostics:
+        environment["SIMCTL_CHILD_IOS_RUNTIME_DIAG"] = "1"
+    if args.alpha_stats:
+        environment["SIMCTL_CHILD_IOS_ALPHA_STATS"] = "1"
     app = subprocess.Popen(["xcrun", "simctl", "launch", "--console", "--terminate-running-process",
                             args.device, args.bundle], stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, text=True, bufsize=1, env=environment)

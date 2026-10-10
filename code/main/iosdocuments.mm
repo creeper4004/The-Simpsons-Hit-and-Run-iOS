@@ -60,4 +60,46 @@ extern "C" const char* iOSGetDocumentsDir(void)
 
     return s_initialized ? s_documentsPath : NULL;
 }
+// SDL_main runs a continuous C++ loop inside UIKit's launch callback. Drain
+// temporary Cocoa/Metal objects every frame instead of at SDL_main return.
+extern "C" void* iOSBeginFrameAutoreleasePool()
+{
+    return [[NSAutoreleasePool alloc] init];
+}
+extern "C" void iOSEndFrameAutoreleasePool(void* pool)
+{
+    [(NSAutoreleasePool*)pool drain];
+}
+
+// Kept independent of the frame loop so hangs leave memory samples behind.
+extern "C" void iOSSampleRuntimeHealth();
+extern "C" void iOSDiagnosticEvent(const char*, const char*);
+extern "C" void iOSDiagnosticFlush();
+extern "C" void iOSStartHealthMonitor()
+{
+    static dispatch_source_t timer;
+    static id warningObserver, backgroundObserver, foregroundObserver;
+    if (timer) return;
+    dispatch_queue_t queue = dispatch_get_global_queue(QOS_CLASS_UTILITY, 0);
+    timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 0),
+                              5 * NSEC_PER_SEC, NSEC_PER_SEC / 2);
+    dispatch_source_set_event_handler(timer, ^{ iOSSampleRuntimeHealth(); });
+    dispatch_resume(timer);
+    NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
+    warningObserver = [center addObserverForName:UIApplicationDidReceiveMemoryWarningNotification
+        object:nil queue:nil usingBlock:^(NSNotification*) {
+            iOSDiagnosticEvent("memory-warning", "source=UIKit");
+            iOSSampleRuntimeHealth();
+        }];
+    backgroundObserver = [center addObserverForName:UIApplicationDidEnterBackgroundNotification
+        object:nil queue:nil usingBlock:^(NSNotification*) {
+            iOSDiagnosticEvent("lifecycle", "state=background");
+            iOSDiagnosticFlush();
+        }];
+    foregroundObserver = [center addObserverForName:UIApplicationWillEnterForegroundNotification
+        object:nil queue:nil usingBlock:^(NSNotification*) {
+            iOSDiagnosticEvent("lifecycle", "state=foreground");
+        }];
+}
 #endif // RAD_IOS

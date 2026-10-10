@@ -73,6 +73,16 @@
 #include <stdio.h>
 extern "C" const char* iOSGetDocumentsDir(void);
 extern "C" void iOSProgress(const char* stage);
+extern "C" void iOSUpdateDiagnosticContext(int context, unsigned inputState);
+extern "C" void* iOSBeginFrameAutoreleasePool();
+extern "C" void iOSEndFrameAutoreleasePool(void*);
+class IosFrameAutoreleasePool {
+public:
+    IosFrameAutoreleasePool() : pool(iOSBeginFrameAutoreleasePool()) {}
+    ~IosFrameAutoreleasePool() { iOSEndFrameAutoreleasePool(pool); }
+private:
+    void* pool;
+};
 extern "C" void iOSRuntimeLog(const char* subsystem, const char* message);
 #endif
 #ifdef RAD_ANDROID
@@ -131,6 +141,7 @@ static void UpdateTouchContextResolverFromGame()
 
 #ifdef RAD_IOS
     {
+        iOSUpdateDiagnosticContext(currentContext, inputGameState);
         static int lastContext = -1;
         static unsigned lastInputState = ~0u;
         if (currentContext != lastContext || inputGameState != lastInputState) {
@@ -909,6 +920,9 @@ void Game::Run()
     unsigned time = radTimeGetMilliseconds();
     while( !mExitNow )
     {
+#ifdef RAD_IOS
+        IosFrameAutoreleasePool framePool;
+#endif
         DEMOPROFILE( g_DemoProfiler.Start(PROFILE_CHANNEL_ALL); )
 
         BEGIN_PROFILER_FRAME();

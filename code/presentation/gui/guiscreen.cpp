@@ -247,7 +247,7 @@ CGuiScreen::CGuiScreen
             
             rAssert( m_buttonIcons[ BUTTON_ICON_ACCEPT ] != NULL );
 
-#ifdef RAD_WIN32
+#if defined(RAD_WIN32) || defined(RAD_IOS)
             // resize the button icon
             //
             Scrooby::Sprite* icon = m_buttonIcons[ BUTTON_ICON_ACCEPT ]->GetSprite( "Accept" );
@@ -285,7 +285,7 @@ CGuiScreen::CGuiScreen
 
             rAssert( m_buttonIcons[ BUTTON_ICON_BACK ] != NULL );
 
-#ifdef RAD_WIN32
+#if defined(RAD_WIN32) || defined(RAD_IOS)
             // resize the button icon
             //
             Scrooby::Sprite* icon = m_buttonIcons[ BUTTON_ICON_BACK ]->GetSprite( "Back" );
@@ -886,9 +886,9 @@ CGuiScreen::RestoreButtons()
             }
 #endif
 */
-#if defined( RAD_WIN32 ) && !defined( RAD_PC )
+#if (defined(RAD_WIN32) && !defined(RAD_PC)) || defined(RAD_IOS)
 
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     const int childCount = m_buttonIcons[i]->Size();
     //LOGI("[RestoreButtons] icon=%d ptr=%p childrenCount=%d",
       //   i, (void*)m_buttonIcons[i], childCount);
@@ -908,7 +908,7 @@ CGuiScreen::RestoreButtons()
             buttonIcon->ScaleAboutCenter( BUTTON_SCALE );
         }
 
-    #ifdef RAD_ANDROID
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
     }
     else
     {

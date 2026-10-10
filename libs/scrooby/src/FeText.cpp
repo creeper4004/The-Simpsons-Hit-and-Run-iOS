@@ -66,7 +66,7 @@ FeText::FeText( const tName& name, int x, int y )
     mOverrideStringBuffer( false ),
     mDisplayShadow( false ),
     mDisplayOutline( false ),
-#ifdef RAD_WIN32
+#if defined(RAD_WIN32) || defined(RAD_IOS)
     mIsBoundingBoxStretched( false ),
 #endif
     mOutlineColour( 0, 0, 0, 192 )
@@ -147,7 +147,8 @@ void FeText::Display() //Override
         p3d::stack->Scale( scale, scale, 1.0f );
         ResetText();
 
-#ifdef RAD_WIN32
+#if defined(RAD_WIN32) || defined(RAD_IOS)
+        // iOS also loads the PC font assets.
         // TC: for PC sku, the source fonts are actually twice as big (for higher resolution display),
         //     so we need to scale them back down to the intended size
         //
@@ -429,7 +430,7 @@ void FeText::Reset()
 
 void FeText::ReCalculateAlignment()
 {
-#ifdef RAD_WIN32
+#if defined(RAD_WIN32) || defined(RAD_IOS)
     if( !mIsBoundingBoxStretched )
     {
         // TC: for PC sku, the source fonts are actually twice as big (for higher resolution display),
@@ -466,7 +467,8 @@ void FeText::ReCalculateAlignment()
         height = (mFont->GetTextHeight( FeApp::GetInstance()->GetTextBuffer() )) * scale;
         NormalizeCoord( m_width, m_height, boxWidth, boxHeight );
 
-#ifdef RAD_WIN32
+#if defined(RAD_WIN32) || defined(RAD_IOS)
+        // iOS also loads the PC font assets.
         // TC: for PC sku, the source fonts are actually twice as big (for higher resolution display),
         //     so the width of the current text string is only half as wide; this is needed for proper
         //     right alignment

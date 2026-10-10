@@ -25,6 +25,11 @@
 #include "xml/XMLTree.h"
 #include <raddebug.hpp>
 
+#ifdef RAD_IOS
+extern "C" void iOSBeginUiFrame(const char*);
+extern "C" void iOSEndUiFrame();
+#endif
+
 //===========================================================================
 // Global Data, Local Data, Local Classes
 //===========================================================================
@@ -172,6 +177,9 @@ void FeScreen::AddChild( FeEntity* s )
 //===========================================================================
 void FeScreen::Display()
 {
+#ifdef RAD_IOS
+    iOSBeginUiFrame(GetFileName());
+#endif
     p3d::pddi->PushState( PDDI_STATE_RENDER );
     p3d::pddi->PushState( PDDI_STATE_VIEW );
     p3d::pddi->EnableZBuffer( false );
@@ -206,6 +214,9 @@ void FeScreen::Display()
 
     // render all screen objects
     FeOwner::Display();
+#ifdef RAD_IOS
+    iOSEndUiFrame();
+#endif
 
     p3d::stack->Pop();
     p3d::pddi->PopState( PDDI_STATE_RENDER );

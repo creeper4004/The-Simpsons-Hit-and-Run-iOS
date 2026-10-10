@@ -23,6 +23,10 @@
 extern "C" void iOSRuntimeLog( const char* subsystem, const char* message );
 #endif
 
+#ifdef RAD_IOS
+#include "iosuitest.inc"
+#endif
+
 // vertex arrays rendering
 GLenum primTypeTable[5] =
 {
@@ -381,6 +385,15 @@ void pglContext::BeginFrame()
 void pglContext::EndFrame()
 {
     pddiBaseContext::EndFrame();
+#ifdef RAD_IOS
+    if (getenv("IOS_UI_GPU_TEST")) {
+        DrawIosUiRegression(display->GetWidth(), display->GetHeight());
+        // The regression intentionally owns the final frame. Normal draws must
+        // rebind their program next frame, even if the logical PDDI cache agrees.
+        if (currentProgram) currentProgram->UseProgram();
+        SyncState(0xffffffff);
+    }
+#endif
 }
 
 // buffer clearing
@@ -681,6 +694,12 @@ void pglContext::EndPrims(pddiPrimStream* stream)
                         glstream->colours.size() > 2 ? glstream->colours[2] : 0, c0a);
                 epN++;
             }
+            static int alphaStatsEnabled = -1;
+            if( alphaStatsEnabled < 0 )
+            {
+                alphaStatsEnabled = getenv( "IOS_ALPHA_STATS" ) != NULL ? 1 : 0;
+            }
+            if( alphaStatsEnabled )
             {
                 // ALPHASTAT: rolling summary - every 250th stream logs distribution of the last 250 alphas
                 static long aN = 0;

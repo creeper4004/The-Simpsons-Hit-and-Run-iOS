@@ -1,6 +1,44 @@
 # iOS MGL Render Bring-Up — Session Handoff (2026-09-03)
 
+## 2026-10-09 screenshot and exit follow-up
+
+- Reviewed IMG_9053–IMG_9057: textured world/characters/vehicles are visible;
+  radar remains square, an opaque black effect is visible at the left, and
+  briefing text has inconsistent sizes with overlapping characters. Cinematic
+  letterbox bars are expected; renderer defects remain open.
+- iOS now applies the PC Scrooby font scale, wrapping/right-alignment correction,
+  and accept/back sprite scale. Mission-load intro/outro now toggles the mobile
+  briefing input profile on iOS. These are code corrections, not phone-verified
+  visual fixes.
+- Physical-device launches persist console output and five-second memory/context
+  health samples. Fatal-signal recording now uses a preopened descriptor and an
+  alternate signal stack without runtime allocation/unwinding. C++ terminate
+  copies exception detail while the caught object is alive. See
+  `IOS_RUNTIME_DIAGNOSTICS.md` for files and limitations.
+- Crash cause remains unknown. No new phone crash artifact was supplied;
+  memory-pressure termination is a hypothesis requiring health/Jetsam evidence.
+- Simulator Release compilation succeeded during this pass; the final incremental
+  build includes the text-wrapping member change. No physical-device install or
+  visual gameplay validation has been performed in this pass.
+
 ## Latest status — 2026-10-09 save and overlay diagnostics
+
+- Performance instrumentation was separated from visual probes: the simulator
+  harness now enables lightweight once-per-second `IOS_FRAME_STATS` by default,
+  while MGL attribute/texture probes and per-draw alpha histograms are opt-in.
+  The alpha histogram had been doing work and printing every 250 immediate
+  streams unconditionally, contaminating frame-time measurements; it now only
+  runs with `IOS_ALPHA_STATS=1` / `--alpha-stats`. Frame stats report FPS and
+  average/maximum frame interval, draw count, and pipeline count.
+- A clean 25-second front-end simulator baseline captured 50 screenshots with
+  no `ALPHASTAT` output. After startup, it measured roughly 73–75 swap calls/s,
+  average intervals around 13.5–13.8 ms and occasional maxima around 18–22 ms.
+  The first startup interval includes loading and is not representative. This
+  is **not** a driving benchmark; route-specific performance still needs an
+  interactive capture with action markers.
+- `/tmp/shar-captures/render-baseline-timed-20261009/` is the clean baseline.
+  `/tmp/shar-captures/render-driving-20261009/` was interrupted after I found
+  the unconditional alpha histogram and must not be used to judge performance.
 
 - iOS/mobile save storage now selects the SDL default writable drive after the
   drive-open pass completes. This was missing on iOS because the console memory
@@ -27,6 +65,14 @@
 - The simulator self-test created `Save1` and `Save2` in its app Documents
   directory. The latest runtime trace and screenshots are local simulator
   artifacts, not checked into the repository.
+- The next rendering/performance pass should record a simulator drive, not
+  change blend/depth state by guesswork. The capture harness now accepts
+  `--runtime-diagnostics`, pairing bounded GLES alpha/blend/depth/scissor logs
+  with screenshots/video and once-per-second frame/draw/pipeline counts. Use
+  `--mark` from a second terminal at each black spot or hitch, then compare the
+  marked interval and neighboring frames before changing renderer code. The
+  route still needs an interactive simulator reproduction; no driving input is
+  synthesized by the capture tool.
 
 ## Latest live result — 2026-10-08 evening
 
@@ -810,3 +856,22 @@ The remaining visual issue is now after shader transform and pipeline setup:
 some front-end elements/textures are absent or malformed even though geometry
 draws. Continue with per-draw UV/texture sampling inspection rather than
 viewport, blend, or command-buffer debugging.
+# Tested UI rendering and persistent health follow-up (2026-10-09)
+
+Traced Scrooby child order and embedded Pure3D state changes into MGL. Added
+real GPU screenshot regressions and an always-on rotating health log. Found and
+fixed simultaneous buffer/render-state updates suppressing viewport/depth/scissor
+changes, plus pending depth clears being lost when depth testing was disabled.
+Final simulator run passes 24/24 pixel assertions; logger concurrency/rotation
+test passes. Simulator and signed iPhone Release builds succeed.
+
+Memory growth remains measurable after adding a per-frame autorelease pool.
+Duplicate mission labels also remain visible in ordinary gameplay. Do not equate
+the synthetic GPU pass with full UI correctness or a resolved phone crash.
+Commands, coverage and measured limits: [tests/ios/README.md](tests/ios/README.md).
+
+## User visual confirmation (2026-10-09)
+
+The user reports that the minimap now draws correctly and the UI issues appear
+fixed, with improved appearance. The unresolved memory-growth investigation
+remains separate from that visual confirmation.

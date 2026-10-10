@@ -27,6 +27,11 @@
 #include "FeResourceEntry.h"
 #include "FeScreen.h"
 #include <radmath/radmath.hpp>
+#include <stdio.h>
+#ifdef RAD_IOS
+extern "C" bool iOSShouldTraceUiDraw();
+extern "C" void iOSDiagnosticEvent(const char*, const char*);
+#endif
 #include "ResourceManager/FeResourceManager.h"
 
 // TC [HACK]: Override camera settings.
@@ -516,6 +521,15 @@ void FePure3dObject::Render()
     // draw the damn thing!
     //
     rAssert( m_RuntimeDrawable != NULL );
+#ifdef RAD_IOS
+    if (iOSShouldTraceUiDraw()) {
+        char detail[384];
+        snprintf(detail, sizeof(detail), "name=%s uid=%llu colorWrite=%d clearDepth=%d depth=%d depthWrite=%d compare=%d view=%.3f,%.3f,%.3f,%.3f",
+                 GetName(), (unsigned long long)GetUID(), m_colourWriteEnabled, m_clearDepthBufferEnabled,
+                 p3d::pddi->IsZBufferEnabled(), p3d::pddi->GetZWrite(), p3d::pddi->GetZCompare(), l, t, r, b);
+        iOSDiagnosticEvent("ui-3d", detail);
+    }
+#endif
     m_RuntimeDrawable->Display();
 
     // restore everything we changed

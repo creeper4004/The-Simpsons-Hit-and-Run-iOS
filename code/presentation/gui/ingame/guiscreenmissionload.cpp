@@ -36,7 +36,7 @@
 #include <p3d/unicode.hpp>
 #include <string.h>
 
-#if defined(RAD_ANDROID)
+#if defined(RAD_ANDROID) || defined(RAD_IOS)
 #include <input/touch/touchcontextresolver.h>
 #endif
 
@@ -354,7 +354,7 @@ void CGuiScreenMissionLoad::InitIntro()
 {
     CGuiScreenMissionBase::InitIntro();
 
-    #if defined(RAD_ANDROID)
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
         TouchContextResolver::GetInstance().SetMissionBriefingActive( true );
     #endif
 
@@ -429,7 +429,7 @@ void CGuiScreenMissionLoad::InitIntro()
 //===========================================================================
 void CGuiScreenMissionLoad::InitOutro()
 {
-    #if defined(RAD_ANDROID)
+    #if defined(RAD_ANDROID) || defined(RAD_IOS)
         TouchContextResolver::GetInstance().SetMissionBriefingActive( false );
     #endif
     CGuiScreenMissionBase::InitOutro();

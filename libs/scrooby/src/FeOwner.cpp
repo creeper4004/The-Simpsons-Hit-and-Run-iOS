@@ -27,7 +27,13 @@
 #include <p3d/utility.hpp>
 #include "utility/debugMessages.h"
 #include "string.h"
+#include <stdio.h>
 
+
+#ifdef RAD_IOS
+extern "C" bool iOSShouldTraceUiDraw();
+extern "C" void iOSDiagnosticEvent(const char*, const char*);
+#endif
 
 FeOwner::FeOwner( const tName& name ) : 
     FeDrawable( name )
@@ -140,6 +146,19 @@ void FeOwner::Display()
                 tColour newColour = drawable->GetColour();
                 drawable->ModulateColour( newColour, GetColour() );
                 drawable->SetColour( newColour );
+#ifdef RAD_IOS
+                if (iOSShouldTraceUiDraw()) {
+                    const char* type = dynamic_cast<FeText*>(drawable) ? "text" :
+                        dynamic_cast<FeSprite*>(drawable) ? "sprite" :
+                        dynamic_cast<FePure3dObject*>(drawable) ? "pure3d" :
+                        dynamic_cast<FePolygon*>(drawable) ? "polygon" : "group";
+                    char detail[512];
+                    snprintf(detail, sizeof(detail), "parent=%s parent_uid=%llu order=%d name=%s uid=%llu type=%s pos=%.3f,%.3f alpha=%u depth=%d depthWrite=%d compare=%d",
+                             GetName(), (unsigned long long)GetUID(), i, drawable->GetName(), (unsigned long long)drawable->GetUID(), type, x, y, newColour.Alpha(),
+                             p3d::pddi->IsZBufferEnabled(), p3d::pddi->GetZWrite(), p3d::pddi->GetZCompare());
+                    iOSDiagnosticEvent("ui-draw", detail);
+                }
+#endif
                 drawable->Display();
                 drawable->SetColour( originalColour );
 

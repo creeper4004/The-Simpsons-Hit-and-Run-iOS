@@ -10,7 +10,7 @@
 // target ejecutable SimpsonsIOS. No hace falta ninguna logica aqui.
 //
 // Ademas registra un manejador de señales (SIGABRT/SIGSEGV/SIGBUS/SIGILL) y
-// std::set_terminate que vuelca un backtrace a <Documents>/crash.txt, para
+// std::set_terminate. Guarda señales sin allocation y backtraces de terminate, para
 // poder diagnosticar un crash de arranque en el dispositivo real (que sale de
 // forma silenciosa en la pantalla oscura).
 //=============================================================================
@@ -24,8 +24,45 @@
 #include <exception>
 #include <stdio.h>
 #include <time.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <mach/mach.h>
+#include <sys/stat.h>
+#include <TargetConditionals.h>
+#include <atomic>
+#include "diagnostics/persistentlog.h"
+
+static PersistentLog s_healthLog;
+static std::atomic<int> s_gameContext(-1);
+static std::atomic<unsigned> s_inputState(0);
+extern "C" void iOSStartHealthMonitor();
+extern "C" void iOSDiagnosticEvent(const char* event, const char* detail) {
+    s_healthLog.Write(event, detail);
+}
+extern "C" void iOSDiagnosticFlush() { s_healthLog.Flush(); }
+extern "C" void iOSUpdateDiagnosticContext(int context, unsigned inputState) {
+    s_gameContext.store(context);
+    s_inputState.store(inputState);
+}
 
 extern "C" const char* iOSGetDocumentsDir(void);
+
+static bool s_traceUi = false;
+extern "C" bool iOSShouldTraceUiDraw() { return s_traceUi; }
+extern "C" void iOSBeginUiFrame(const char* screen) {
+    static char lastScreen[128] = "";
+    static time_t lastSample = 0;
+    time_t now = time(NULL);
+    s_traceUi = strcmp(lastScreen, screen) != 0 || now - lastSample >= 5;
+    if (s_traceUi) {
+        snprintf(lastScreen, sizeof(lastScreen), "%s", screen);
+        lastSample = now;
+        char detail[192];
+        snprintf(detail, sizeof(detail), "epoch=%ld screen=%s", (long)now, screen);
+        iOSDiagnosticEvent("ui-frame", detail);
+    }
+}
+extern "C" void iOSEndUiFrame() { s_traceUi = false; }
 
 static void WriteCrashDump(const char* header, void** frames, int nframes)
 {
@@ -67,36 +104,130 @@ static void WriteCrashDump(const char* header, void** frames, int nframes)
     fclose( f );
 }
 
-static void SignalHandler(int sig)
+// Opened during normal startup, never from a failing signal handler.
+static int s_crashFd = -1;
+static unsigned char s_signalStack[64 * 1024];
+
+static void SignalHandler(int sig, siginfo_t* info, void*)
 {
-    void* frames[ 64 ];
-    int n = backtrace( frames, 64 );
-    char header[ 64 ];
-    snprintf( header, sizeof( header ), "signal %d", sig );
-    WriteCrashDump( header, frames, n );
-    // Re-raise con la disposicion por defecto para que el sistema registre el crash.
-    signal( sig, SIG_DFL );
-    raise( sig );
+    // No Foundation, stdio, unwinding or allocation here: any of those can
+    // deadlock when the interrupted thread held a runtime/allocator lock.
+    char record[128];
+    size_t n = 0;
+    const char prefix[] = "fatal signal=0x";
+    for (size_t i = 0; i < sizeof(prefix) - 1; ++i) record[n++] = prefix[i];
+    const char hex[] = "0123456789abcdef";
+    record[n++] = hex[(sig >> 4) & 15];
+    record[n++] = hex[sig & 15];
+    const char address[] = " address=0x";
+    for (size_t i = 0; i < sizeof(address) - 1; ++i) record[n++] = address[i];
+    uintptr_t value = info ? reinterpret_cast<uintptr_t>(info->si_addr) : 0;
+    for (int shift = sizeof(value) * 8 - 4; shift >= 0; shift -= 4)
+        record[n++] = hex[(value >> shift) & 15];
+    record[n++] = '\n';
+    if (s_crashFd >= 0) write(s_crashFd, record, n);
+    write(STDERR_FILENO, record, n);
+    // SA_RESETHAND restores default disposition; deliver after unblocking.
+    sigset_t unblock;
+    sigemptyset(&unblock);
+    sigaddset(&unblock, sig);
+    sigprocmask(SIG_UNBLOCK, &unblock, NULL);
+    raise(sig);
+    _exit(128 + sig);
+}
+
+extern "C" void iOSInitializePersistentDiagnostics()
+{
+    const char* docs = iOSGetDocumentsDir();
+    if (!docs || !docs[0]) return;
+    if (!s_healthLog.Open(docs, 4 * 1024 * 1024))
+        fprintf(stderr, "IOS_DIAGNOSTIC_ERROR health-log-open errno=%d directory=%s\n", errno, docs);
+    char session[256];
+    snprintf(session, sizeof(session), "epoch=%ld pid=%d simulator=%d", (long)time(NULL), getpid(), TARGET_OS_SIMULATOR);
+    iOSDiagnosticEvent("session-start", session);
+    iOSStartHealthMonitor();
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/srr2_crash.txt", docs);
+    s_crashFd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
+#if TARGET_OS_SIMULATOR
+    // Simulator capture already owns stdout/stderr. Preserve its live pipe.
+    if (!getenv("IOS_PERSIST_CONSOLE")) return;
+#endif
+    // Retain the preceding session across a relaunch.
+    char previous[1024];
+    snprintf(path, sizeof(path), "%s/srr2_console.log", docs);
+    snprintf(previous, sizeof(previous), "%s/srr2_console.previous.log", docs);
+    rename(path, previous);
+    int console = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (console >= 0) {
+        dup2(console, STDOUT_FILENO);
+        dup2(console, STDERR_FILENO);
+        close(console);
+        setvbuf(stdout, NULL, _IONBF, 0);
+        setvbuf(stderr, NULL, _IONBF, 0);
+    }
+    fprintf(stderr, "IOS_SESSION start epoch=%ld pid=%d\n", (long)time(NULL), getpid());
+}
+
+extern "C" void iOSSampleRuntimeHealth()
+{
+    // Runs on an independent utility queue even if the game thread stalls.
+    struct stat consoleStat;
+    if (fstat(STDERR_FILENO, &consoleStat) == 0 && S_ISREG(consoleStat.st_mode) &&
+        consoleStat.st_size > 8 * 1024 * 1024) {
+        const char* docs = iOSGetDocumentsDir();
+        if (docs) {
+            char path[1024], previous[1024];
+            snprintf(path, sizeof(path), "%s/srr2_console.log", docs);
+            snprintf(previous, sizeof(previous), "%s/srr2_console.previous.log", docs);
+            rename(path, previous);
+            int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+            if (fd >= 0) {
+                dup2(fd, STDOUT_FILENO);
+                dup2(fd, STDERR_FILENO);
+                close(fd);
+            }
+        }
+    }
+    task_vm_info_data_t memory = {};
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    kern_return_t result = task_info(mach_task_self(), TASK_VM_INFO,
+                                    reinterpret_cast<task_info_t>(&memory), &count);
+    mach_task_basic_info_data_t basic = {};
+    count = MACH_TASK_BASIC_INFO_COUNT;
+    kern_return_t basicResult = task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
+                                        reinterpret_cast<task_info_t>(&basic), &count);
+    task_thread_times_info_data_t times = {};
+    count = TASK_THREAD_TIMES_INFO_COUNT;
+    kern_return_t cpuResult = task_info(mach_task_self(), TASK_THREAD_TIMES_INFO,
+                                      reinterpret_cast<task_info_t>(&times), &count);
+    char health[768];
+    snprintf(health, sizeof(health),
+             "epoch=%ld context=%d input=%u vm_status=%d basic_status=%d cpu_status=%d footprint_bytes=%llu resident_bytes=%llu resident_peak_bytes=%llu virtual_bytes=%llu user_us=%llu system_us=%llu",
+             (long)time(NULL), s_gameContext.load(), s_inputState.load(), result, basicResult, cpuResult,
+             (unsigned long long)memory.phys_footprint, (unsigned long long)memory.resident_size,
+             (unsigned long long)basic.resident_size_max, (unsigned long long)basic.virtual_size,
+             (unsigned long long)times.user_time.seconds * 1000000 + times.user_time.microseconds,
+             (unsigned long long)times.system_time.seconds * 1000000 + times.system_time.microseconds);
+    iOSDiagnosticEvent("health", health);
+    s_healthLog.Flush();
+
 }
 
 static void TerminateHandler()
 {
     void* frames[ 64 ];
     int n = backtrace( frames, 64 );
-    const std::exception* ex = NULL;
+    char detail[192] = "no exception detail";
     std::exception_ptr eptr = std::current_exception();
     if( eptr != NULL ) {
         try { std::rethrow_exception( eptr ); }
-        catch( const std::exception& e ) { ex = &e; }
+        catch( const std::exception& e ) { snprintf(detail, sizeof(detail), "%s", e.what()); }
         catch( ... ) {}
     }
 
     char header[ 256 ];
-    if( ex != NULL ) {
-        snprintf( header, sizeof( header ), "std::terminate: %s", ex->what() ? ex->what() : "(null)" );
-    } else {
-        snprintf( header, sizeof( header ), "std::terminate (no exception detail)" );
-    }
+    snprintf(header, sizeof(header), "std::terminate: %s", detail);
     WriteCrashDump( header, frames, n );
     abort();
 }
@@ -109,10 +240,17 @@ namespace srr2_ios {
     {
         // Siempre instalar en iOS (sideload): un crash de arranque sale de forma
         // silenciosa, necesitamos el dump para diagnosticar.
-        signal( SIGABRT, SignalHandler );
-        signal( SIGSEGV, SignalHandler );
-        signal( SIGBUS,  SignalHandler );
-        signal( SIGILL,  SignalHandler );
+        stack_t stack = {};
+        stack.ss_sp = s_signalStack;
+        stack.ss_size = sizeof(s_signalStack);
+        sigaltstack(&stack, NULL);
+        struct sigaction action = {};
+        action.sa_sigaction = SignalHandler;
+        action.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND;
+        sigemptyset(&action.sa_mask);
+        const int signals[] = {SIGABRT, SIGSEGV, SIGBUS, SIGILL};
+        for (unsigned i = 0; i < sizeof(signals) / sizeof(signals[0]); ++i)
+            sigaction(signals[i], &action, NULL);
         std::set_terminate( TerminateHandler );
     }
 }
