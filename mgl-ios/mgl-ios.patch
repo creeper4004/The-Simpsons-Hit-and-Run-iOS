@@ -77,7 +77,7 @@ index 4a6f0f7..8adb2e5 100644
          unsigned x, y, z;
      } local_workgroup_size;
 diff --git a/MGL/src/MGLRenderer.m b/MGL/src/MGLRenderer.m
-index 31cb54e..2ca7b48 100755
+index 31cb54e..b613fcd 100755
 --- a/MGL/src/MGLRenderer.m
 +++ b/MGL/src/MGLRenderer.m
 @@ -35,6 +35,33 @@
@@ -1032,19 +1032,11 @@ index 31cb54e..2ca7b48 100755
              if (_drawable == NULL) {
                  NSLog(@"MGL ERROR: Failed to obtain any drawable from Metal layer");
                  [_currentCommandBuffer commit];
-@@ -5051,14 +5333,25 @@ -(void) mtlSwapBuffers:(GLMContext) glm_ctx
+@@ -5051,10 +5333,12 @@ -(void) mtlSwapBuffers:(GLMContext) glm_ctx
              [self recordGPUError];
          }
 
 -        _drawable = [_layer nextDrawable];
-+#if TARGET_OS_IPHONE
-+        // Present now, acquire the next drawable only when rendering needs it.
-+        // Waiting here stalls file/sound service after every frame; letting that
-+        // work run first overlaps it with GPU execution/presentation instead.
-+        _drawable = nil;
-+        [self newCommandBuffer];
-+        ctx->state.dirty_bits |= DIRTY_RENDER_STATE;
-+#else
 +        _drawable = MGLAcquireDrawable(_layer);
          if (_drawable == NULL) {
              NSLog(@"MGL WARNING: Failed to get next drawable in mtlSwapBuffers");
@@ -1055,12 +1047,7 @@ index 31cb54e..2ca7b48 100755
              return;
          }
          
-         [self newCommandBufferAndRenderEncoder];
-+#endif
-     }
- }
-
-@@ -5131,7 +5424,9 @@ -(void) mtlBufferSubData:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_t)o
+@@ -5131,7 +5415,9 @@ -(void) mtlBufferSubData:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_t)o
      data = mtl_buffer.contents;
      memcpy(data+offset, ptr, size);
 
@@ -1070,7 +1057,7 @@ index 31cb54e..2ca7b48 100755
  }
 
  void mtlBufferSubData(GLMContext glm_ctx, Buffer *buf, size_t offset, size_t size, const void *ptr)
-@@ -5157,7 +5452,9 @@ -(void *) mtlMapUnmapBuffer:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_
+@@ -5157,7 +5443,9 @@ -(void *) mtlMapUnmapBuffer:(GLMContext) glm_ctx buf:(Buffer *)buf offset:(size_
          return mtl_buffer.contents + offset;
      }
 
@@ -1080,7 +1067,7 @@ index 31cb54e..2ca7b48 100755
 
      return NULL;
  }
-@@ -5175,7 +5472,9 @@ -(void) mtlFlushMappedBufferRange:(GLMContext) glm_ctx buf:(Buffer *)buf offset:
+@@ -5175,7 +5463,9 @@ -(void) mtlFlushMappedBufferRange:(GLMContext) glm_ctx buf:(Buffer *)buf offset:
 
      mtl_buffer = (__bridge id<MTLBuffer>)(buf->data.mtl_data);
 
@@ -1090,7 +1077,7 @@ index 31cb54e..2ca7b48 100755
  }
 
  void mtlFlushBufferRange(GLMContext glm_ctx, Buffer *buf, GLintptr offset, GLsizeiptr length)
-@@ -5501,9 +5800,54 @@ MTLIndexType getMTLIndexType(GLenum type)
+@@ -5501,9 +5791,54 @@ MTLIndexType getMTLIndexType(GLenum type)
  }
 
  #pragma mark C interface to mtlDrawArrays
@@ -1145,7 +1132,7 @@ index 31cb54e..2ca7b48 100755
 
      // AGGRESSIVE MEMORY SAFETY: Immediate validation before any Metal operations (realistic bounds)
      if (!ctx || ((uintptr_t)ctx < 0x1000) || ((uintptr_t)ctx > 0x100000000000ULL)) {
-@@ -5515,6 +5859,21 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
+@@ -5515,6 +5850,21 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
          NSLog(@"MGL ERROR: mtlDrawArrays - processGLState failed, aborting");
          return; // Early return instead of continuing with invalid state
      }
@@ -1167,7 +1154,7 @@ index 31cb54e..2ca7b48 100755
 
      // Additional safety check after processGLState
      if (!_currentRenderEncoder) {
-@@ -5522,6 +5881,86 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
+@@ -5522,6 +5872,86 @@ -(void) mtlDrawArrays: (GLMContext) ctx mode:(GLenum) mode first: (GLint) first
          return;
      }
 
@@ -1254,7 +1241,7 @@ index 31cb54e..2ca7b48 100755
      primitiveType = getMTLPrimitiveType(mode);
      assert(primitiveType != 0xFFFFFFFF);
 
-@@ -5566,11 +6005,70 @@ void mtlDrawArrays(GLMContext glm_ctx, GLenum mode, GLint first, GLsizei count)
+@@ -5566,11 +5996,70 @@ void mtlDrawArrays(GLMContext glm_ctx, GLenum mode, GLint first, GLsizei count)
  #pragma mark C interface to mtlDrawElements
  -(void) mtlDrawElements: (GLMContext) glm_ctx mode:(GLenum) mode count: (GLsizei) count type: (GLenum) type indices:(const void *)indices
  {
@@ -1325,7 +1312,7 @@ index 31cb54e..2ca7b48 100755
      primitiveType = getMTLPrimitiveType(mode);
      assert(primitiveType != 0xFFFFFFFF);
 
-@@ -6238,7 +6736,34 @@ - (void) bindObjFuncsToGLMContext: (GLMContext) glm_ctx
+@@ -6238,7 +6727,34 @@ - (void) bindObjFuncsToGLMContext: (GLMContext) glm_ctx
      glm_ctx->mtl_funcs.mtlDispatchComputeIndirect = mtlDispatchComputeIndirect;
  }
 
@@ -1361,7 +1348,7 @@ index 31cb54e..2ca7b48 100755
  {
      assert (window);
      assert (glm_ctx);
-@@ -6310,7 +6835,9 @@ - (id) createMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (NSWindow
+@@ -6310,7 +6826,9 @@ - (id) createMGLRendererFromContext: (void *)glm_ctx andBindToWindow: (NSWindow
      return  (__bridge void *)(renderer);
  }
 
@@ -1372,7 +1359,7 @@ index 31cb54e..2ca7b48 100755
  {
      ctx = glm_ctx;
 
-@@ -6368,11 +6895,38 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6368,11 +6886,38 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
 
      NSLog(@"MGL INFO: Metal command queue created successfully");
 
@@ -1412,7 +1399,7 @@ index 31cb54e..2ca7b48 100755
      _layer = [[CAMetalLayer alloc] init];
      if (!_layer) {
          NSLog(@"MGL ERROR: Failed to create Metal layer");
-@@ -6382,7 +6936,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6382,7 +6927,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
      _layer.device = _device;
      _layer.pixelFormat = ctx->pixel_format.mtl_pixel_format;
      _layer.framebufferOnly = NO; // enable blitting to main color buffer
@@ -1421,7 +1408,7 @@ index 31cb54e..2ca7b48 100755
      _layer.magnificationFilter = kCAFilterNearest;
      _layer.presentsWithTransaction = NO;
 
-@@ -6396,6 +6950,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6396,6 +6941,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
      } else {
          [_view setLayer: _layer];
      }
@@ -1429,7 +1416,7 @@ index 31cb54e..2ca7b48 100755
 
      mglDrawBuffer(glm_ctx, GL_FRONT);
 
-@@ -6409,7 +6964,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
+@@ -6409,7 +6955,7 @@ - (void) createMGLRendererAndBindToContext: (GLMContext) glm_ctx view: (NSView *
          NSLog(@"MGL ERROR: Exception creating initial Metal command buffer: %@", exception);
      }
      
@@ -1438,7 +1425,7 @@ index 31cb54e..2ca7b48 100755
 
      // PROACTIVE TEXTURE CREATION: Create essential textures to break sync loop
      NSLog(@"MGL INFO: PROACTIVE - Creating essential textures to prevent magenta screen");
-@@ -6732,6 +7287,7 @@ - (void)resetMetalState
+@@ -6732,6 +7278,7 @@ - (void)resetMetalState
 
      // Reset pipeline state
      _pipelineState = nil;
@@ -1446,7 +1433,7 @@ index 31cb54e..2ca7b48 100755
      // Note: _depthStencilState would be an instance variable if it exists
 
      // Clear all cached objects
-@@ -6806,9 +7362,9 @@ - (void)commitCommandBufferWithAGXRecovery:(id<MTLCommandBuffer>)commandBuffer
+@@ -6806,9 +7353,9 @@ - (void)commitCommandBufferWithAGXRecovery:(id<MTLCommandBuffer>)commandBuffer
 
      // Commit with exception handling
      @try {

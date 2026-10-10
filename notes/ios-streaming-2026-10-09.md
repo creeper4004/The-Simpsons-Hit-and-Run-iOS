@@ -86,3 +86,19 @@ Existing simulator GPU regression: **24/24 pixel assertions passed** after
 these rendering changes, with persistent health records present. Artifacts:
 `/tmp/shar-deferred-ui-check/`. This does not reproduce the phone collision
 route or prove that all driving frame drops are fixed.
+
+## Gameplay viewport regression correction
+
+The user screenshot at 20:02:10 shows HUD at full size but world geometry
+restricted to approximately one third of the width/height at the lower left.
+The deferred-drawable change was introduced after the successful loader run.
+Restore the prior swap-tail drawable acquisition and immediate encoder setup;
+retain the explicit loader handoff, phase logging and reduced cleanup spew.
+
+The synthetic UI pass did not cover the first world pass after presentation.
+In particular, acquiring a drawable in newRenderEncoder also resets the cached
+scissor box from CAMetalLayer frame dimensions (points), which is unsafe to move
+into a world pass that uses physical-pixel scissoring. Do not reintroduce deferred
+acquisition without preserving engine scissor state and a gameplay regression
+covering the frame boundary. Pixel-test success alone is insufficient evidence
+for a world-viewport change.
