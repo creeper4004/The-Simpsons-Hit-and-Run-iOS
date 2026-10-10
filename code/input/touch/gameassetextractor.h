@@ -1,23 +1,9 @@
 #ifndef GAMEASSETEXTRACTOR_H_
 #define GAMEASSETEXTRACTOR_H_
 
-//=============================================================================
-// GameAssetExtractor (iOS)
-//
-// The engine reads all game data (art/, movies/, scripts/, sound/, *.rcf,
-// simpsons.ini) relative to the process working directory. On iOS the app is
-// sandboxed: the bundle (Resources/) is read-only, and the only writable
-// location the engine can chdir() to is the app's Documents/ directory.
-//
-// The Android port reads the game-asset tree directly from assets/ exposed in
-// the app's files dir (CWD-relative). On iOS we instead bundle the whole
-// tree inside the .app bundle and copy it out to Documents/ on first run,
-// so the engine's CWD-relative file APIs resolve identically.
-//
-// Copies the bundled game assets from the app bundle Resource root (iOS only)
-// into the writable Documents/ dir. Runs once per install (version-gated), or
-// whenever a required top-level item is missing.
-//=============================================================================
+// iOS game data lives in Documents/game, independently of saves and logs.
+// Reuse user-provided assets, migrate the legacy Documents tree by renaming,
+// or extract a bundle only when the optional embedded build contains one.
 
 class GameAssetExtractor
 {
@@ -39,6 +25,7 @@ private:
 
     bool BuildOutputRoot();
     bool NeedsExtraction() const;
+    bool MigrateLegacyAssets();
 
     bool CopyKnownAssets();
     bool CopyAssetTree( const char* relativePath );
@@ -49,8 +36,6 @@ private:
     bool FileExists( const char* path ) const;
     bool FileExistsAtOutput( const char* relativePath ) const;
 
-    bool WriteVersionFile();
-    bool IsVersionFileValid() const;
 
     void SetLastError( const char* error );
 

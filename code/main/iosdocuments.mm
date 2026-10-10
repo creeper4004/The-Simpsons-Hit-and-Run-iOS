@@ -11,6 +11,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #include <limits.h>   // PATH_MAX
+#include <stdio.h>
 #include <string.h>   // strncpy
 
 // Tamano del drawable real (pixeles) de la pantalla principal, en orientacion
@@ -60,6 +61,19 @@ extern "C" const char* iOSGetDocumentsDir(void)
 
     return s_initialized ? s_documentsPath : NULL;
 }
+// Game data has its own persistent, Files-accessible folder. Saves and logs
+// continue to use Documents, independent of the read-only game asset path.
+extern "C" const char* iOSGetGameAssetsDir(void)
+{
+    static char path[PATH_MAX];
+    if (!path[0]) {
+        const char* docs = iOSGetDocumentsDir();
+        if (!docs) return NULL;
+        snprintf(path, sizeof(path), "%s/game", docs);
+    }
+    return path;
+}
+
 // SDL_main runs a continuous C++ loop inside UIKit's launch callback. Drain
 // temporary Cocoa/Metal objects every frame instead of at SDL_main return.
 extern "C" void* iOSBeginFrameAutoreleasePool()

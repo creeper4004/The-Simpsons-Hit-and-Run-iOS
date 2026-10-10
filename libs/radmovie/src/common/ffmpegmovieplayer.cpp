@@ -35,6 +35,10 @@
 #include "audiodatasource.hpp"
 
 #include <vector>
+#ifdef RAD_IOS
+#include <string>
+extern "C" const char* iOSGetGameAssetsDir(void);
+#endif
 
 
 #if defined(RAD_ANDROID)
@@ -430,6 +434,16 @@ void radMoviePlayer::Load( const char * pVideoFileName, unsigned int audioTrackI
 
 #ifdef RAD_ANDROID
     std::string resolved = RadMakeAbsoluteGamePath( pVideoFileName );
+    const char* moviePath = resolved.c_str();
+#elif defined(RAD_IOS)
+    // FFmpeg reads directly, bypassing the radFile asset-path redirect.
+    std::string resolved(pVideoFileName);
+    for (char& c : resolved) if (c == '\\') c = '/';
+    if (resolved.size() >= 2 && resolved[1] == ':') resolved.erase(0, 2);
+    if (!resolved.empty() && resolved[0] != '/') {
+        const char* gameRoot = iOSGetGameAssetsDir();
+        if (gameRoot) resolved = std::string(gameRoot) + '/' + resolved;
+    }
     const char* moviePath = resolved.c_str();
 #else
     const char* moviePath = pVideoFileName;

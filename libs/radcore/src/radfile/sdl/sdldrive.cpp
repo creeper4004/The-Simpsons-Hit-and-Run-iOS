@@ -27,6 +27,9 @@
 #include <limits.h>
 #include "sdldrive.hpp"
 #include <string>
+#ifdef RAD_IOS
+extern "C" const char* iOSGetGameAssetsDir(void);
+#endif
 #include <SDL.h>
 #if SDL_MAJOR_VERSION < 3
 #ifdef WIN32
@@ -927,9 +930,24 @@ void radSdlDrive::SetMediaInfo( void )
 
 void radSdlDrive::BuildFileSpec( const char* fileName, char* fullName, unsigned int size )
 {
+    std::string relative(fileName);
+    std::replace(relative.begin(), relative.end(), '\\', '/');
     std::string path(m_DrivePath);
-    path += fileName;
-    std::replace(path.begin(), path.end(), '\\', '/');
+#ifdef RAD_IOS
+    // Redirect only game assets. Save files, diagnostics, touch layouts and
+    // other writable files remain rooted in Documents as before.
+    const bool gameAsset = relative.compare(0, 4, "art/") == 0 ||
+        relative.compare(0, 7, "movies/") == 0 ||
+        relative.compare(0, 8, "scripts/") == 0 ||
+        relative.compare(0, 6, "sound/") == 0 || relative == "simpsons.ini" ||
+        (relative.find('/') == std::string::npos && relative.size() >= 4 &&
+         relative.compare(relative.size() - 4, 4, ".rcf") == 0);
+    if (gameAsset) {
+        const char* gameRoot = iOSGetGameAssetsDir();
+        if (gameRoot) { path = gameRoot; path += '/'; }
+    }
+#endif
+    path += relative;
 
     strncpy( fullName, path.c_str(), size - 1 );
     fullName[ size - 1 ] = '\0';

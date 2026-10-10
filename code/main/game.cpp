@@ -774,11 +774,8 @@ void Game::Initialize()
     TouchAssetExtractor::GetInstance().EnsureAssetsExtracted();
     iOSProgress( "game:extract-touch-done" );
     #if defined(RAD_IOS)
-    // iOS: copia el arbol de assets del juego (art/, movies/, scripts/, *.rcf,
-    // simpsons.ini) desde el bundle a Documents/ en el primer arranque, para que
-    // el motor (CWD relativo a Documents/) resuelva todo igual que en Android.
-    bool extracted = GameAssetExtractor::GetInstance().EnsureAssetsExtracted();
-    iOSProgress( extracted ? "game:extract-assets-OK" : "game:extract-assets-FAIL" );
+    // The startup gate resolves Documents/game before the file drive mounts.
+    iOSProgress("game:external-assets-ready");
     #endif
     // Realizamos la carga con pure3d de los iconos extraidos anteriormente 
     TouchAssetManager::GetInstance().Initialize();

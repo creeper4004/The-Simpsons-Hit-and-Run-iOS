@@ -9,6 +9,7 @@
 # Environment:
 #   CONFIG  Debug|Release                                    (default Release)
 #   SYSROOT iphonesimulator|iphoneos                        (default iphonesimulator)
+#   SRR2_IOS_EMBED_GAME_ASSETS ON|OFF (default OFF; data in Documents/game)
 #   SRR2_REGION NTSC|PAL                                    (default PAL)
 #   FFMPEG_OUT_DIR  path to the FFmpeg static libs output  (default $HOME/src/srr2_ios_builds/ffmpeg_out_sim)
 #
@@ -21,6 +22,7 @@ cd "$(dirname "$0")"
 CONFIG="${CONFIG:-Release}"
 SYSROOT="${SYSROOT:-iphonesimulator}"
 REGION="${SRR2_REGION:-PAL}"
+EMBED_GAME_ASSETS="${SRR2_IOS_EMBED_GAME_ASSETS:-OFF}"
 FFMPEG_OUT_DIR="${FFMPEG_OUT_DIR:-$HOME/src/srr2_ios_builds/ffmpeg_out_sim}"
 BUILD_DIR="${BUILD_DIR:-../build_ios}"
 
@@ -54,6 +56,7 @@ cmake -S .. -B "${BUILD_DIR}" \
     -DIOS=ON \
     -DSRR2_P3D_PDDI=GLES2 \
     -DSRR2_REGION="${REGION}" \
+    -DSRR2_IOS_EMBED_GAME_ASSETS="${EMBED_GAME_ASSETS}" \
     -DSRR2_IOS_FFMPEG_DIR="${FFMPEG_OUT_DIR}" \
     "${SIGN_FLAG}" \
     -DSDL_STATIC=ON -DSDL_SHARED=OFF -DSDL_TEST=OFF \

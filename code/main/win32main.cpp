@@ -33,6 +33,8 @@
 // directorio Documents/ (escribible, donde el jugador coloca los assets).
 #include <stdlib.h>
 #include <time.h>
+#include <input/touch/gameassetextractor.h>
+#include <SDL_messagebox.h>
 #include <unistd.h>
 #endif
 
@@ -296,6 +298,16 @@ extern "C" int main( int argc, char *argv[] )
     }
 #ifdef RAD_IOS
     iOSProgress( "win32:InitializeWindow-OK" );
+#endif
+#ifdef RAD_IOS
+    if (!GameAssetExtractor::GetInstance().EnsureAssetsExtracted()) {
+        fprintf(stderr, "[iOS] %s\n", GameAssetExtractor::GetInstance().GetLastError());
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Game data needed",
+            "Copy your game data into Files > On My iPhone > Simpsons Hit & Run > game.\n\n"
+            "The game folder must directly contain art, movies, scripts, sound and the .rcf files. "
+            "Close and reopen the app after the copy finishes.", NULL);
+        return 0;
+    }
 #endif
     Win32Platform::InitializeFoundation();
 #ifdef RAD_IOS

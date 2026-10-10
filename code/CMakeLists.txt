@@ -712,20 +712,26 @@ if(IOS)
 			"$<TARGET_BUNDLE_DIR:SimpsonsIOS>/touch_controls"
 		COMMENT "Bundling touch_controls assets into simpsons.app/touch_controls/"
 	)
-	# Bundle los assets del juego (art/, movies/, scripts/, sound/, *.rcf,
-	# simpsons.ini) dentro del .app. El GameAssetExtractor los copia a
-	# Documents/ en el primer arranque, porque el motor lee todo relativo al
-	# CWD y el bundle (Resources/) es solo lectura.
-	if(EXISTS "${CMAKE_SOURCE_DIR}/game_assets")
+	option(SRR2_IOS_EMBED_GAME_ASSETS "Include the game data in the iOS app bundle" OFF)
+	if(SRR2_IOS_EMBED_GAME_ASSETS)
+		if(NOT EXISTS "${CMAKE_SOURCE_DIR}/game_assets")
+			message(FATAL_ERROR "Embedded asset builds require game_assets/.")
+		endif()
 		add_custom_command(TARGET SimpsonsIOS POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy_directory
 				"${CMAKE_SOURCE_DIR}/game_assets"
 				"$<TARGET_BUNDLE_DIR:SimpsonsIOS>/game_assets"
-			COMMENT "Bundling game assets into simpsons.app/game_assets/"
+			COMMENT "Bundling optional game assets"
 		)
 	else()
-		message(WARNING "game_assets/ not found; the app will have no game assets bundled.")
+		# Also remove resources left by an earlier embedded build in this folder.
+		add_custom_command(TARGET SimpsonsIOS POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E remove_directory
+				"$<TARGET_BUNDLE_DIR:SimpsonsIOS>/game_assets"
+			COMMENT "External game data: omit assets from app bundle"
+		)
 	endif()
+
 	target_link_libraries(SimpsonsIOS
 		main
 		SDL2::SDL2main

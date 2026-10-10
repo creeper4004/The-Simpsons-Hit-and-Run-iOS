@@ -1,16 +1,9 @@
 //=============================================================================
 // GameAssetExtractor.cpp  (RAD_IOS)
 //
-// The engine reads the whole game-asset tree CWD-relative. On iOS the app is
-// sandboxed and chdir(Documents) is the only writable target. This extractor
-// copies the bundled asset tree (from <bundle>/game_assets/) into Documents/
-// on first run (or whenever the tree is incomplete), so pure3d / Scrooby /
-// sound / scripts all resolve exactly as they do on Android where assets are
-// exposed CWD-relative.
-//
-// Mirrors TouchAssetExtractor: version-gated, idempotent, writes a marker file.
-// Uses POSIX dirent/stat/mkdir for a full recursive directory walk; no SDL
-// directory API needed (avoids the SDL2 vs SDL3 directory-API mismatch).
+// External data is kept in Documents/game. Existing extracted data is moved
+// there with top-level renames; optional embedded builds can still seed it.
+// Saves, logs and touch controls keep their original Documents paths.
 //=============================================================================
 #include "gameassetextractor.h"
 
@@ -24,16 +17,16 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #if SDL_MAJOR_VERSION < 3
 #include <SDL_stdinc.h>   // SDL_free
 #endif
 
+extern "C" const char* iOSGetGameAssetsDir(void);
 extern "C" const char* iOSGetDocumentsDir(void);   // bridge (iosdocuments.mm)
 extern "C" void iOSProgress(const char* stage);     // debug progress (win32main.cpp)
 
-#define GAME_ASSET_VERSION_TAG "1"
-#define GAME_ASSET_VERSION_FILE "game_assets.version"
 #define GAME_ASSET_BUNDLE_ROOT "game_assets"
 
 static const char* GAME_ASSET_ITEMS[] = {
@@ -98,24 +91,34 @@ bool GameAssetExtractor::EnsureAssetsExtracted()
         return false;
     }
 
-    if ( !NeedsExtraction() )
-    {
+    if (!NeedsExtraction()) {
         mHasRun = true;
-        iOSProgress( "gameassets:already-extracted" );
+        iOSProgress("gameassets:external-ready");
+        return true;
+    }
+    // Move the old extracted top-level assets within the same filesystem.
+    // Renames do not copy gigabytes, and never replace an imported destination.
+    if (!MigrateLegacyAssets()) return false;
+    if (!NeedsExtraction()) {
+        mHasRun = true;
+        iOSProgress("gameassets:migrated-ready");
         return true;
     }
 
-    iOSProgress( "gameassets:copy-begin" );
-    if ( !CopyKnownAssets() )
-    {
-        iOSProgress( "gameassets:FAIL-CopyKnownAssets" );
-        return false;
+    char bundled[MAX_ASSET_PATH];
+    const char* basePath = SDL_GetBasePath();
+    snprintf(bundled, sizeof(bundled), "%sgame_assets/art", basePath ? basePath : "");
+#if SDL_MAJOR_VERSION < 3
+    SDL_free((void*)basePath);
+#endif
+    if (FileExists(bundled)) {
+        iOSProgress("gameassets:copy-begin");
+        if (!CopyKnownAssets()) return false;
+        iOSProgress("gameassets:copy-done");
     }
-    iOSProgress( "gameassets:copy-done" );
-
-    if ( !WriteVersionFile() )
-    {
-        iOSProgress( "gameassets:FAIL-WriteVersionFile" );
+    if (NeedsExtraction()) {
+        SetLastError("Game data is missing or incomplete in Documents/game.");
+        iOSProgress("gameassets:missing");
         return false;
     }
 
@@ -142,11 +145,11 @@ const char* GameAssetExtractor::GetLastError() const
 }
 
 //=============================================================================
-// BuildOutputRoot  -> <Documents>
+// BuildOutputRoot  -> <Documents>/game
 //=============================================================================
 bool GameAssetExtractor::BuildOutputRoot()
 {
-    const char* docs = iOSGetDocumentsDir();
+    const char* docs = iOSGetGameAssetsDir();
     if ( docs == NULL || docs[ 0 ] == '\0' )
     {
         SetLastError( "iOSGetDocumentsDir returned null/empty." );
@@ -157,7 +160,7 @@ bool GameAssetExtractor::BuildOutputRoot()
 
     if ( !EnsureDirectory( mOutputRoot ) )
     {
-        SetLastError( "Documents dir is not accessible." );
+        SetLastError( "Game data folder is not accessible." );
         return false;
     }
 
@@ -169,20 +172,43 @@ bool GameAssetExtractor::BuildOutputRoot()
 //=============================================================================
 bool GameAssetExtractor::NeedsExtraction() const
 {
-    // If the version file matches and a couple of sentinel items exist, the
-    // tree was already extracted. Otherwise re-extract.
-    if ( IsVersionFileValid() )
-    {
-        for ( unsigned int i = 0; i < sizeof( GAME_ASSET_ITEMS ) / sizeof( GAME_ASSET_ITEMS[ 0 ] ); ++i )
-        {
-            if ( !FileExistsAtOutput( GAME_ASSET_ITEMS[ i ] ) )
-            {
-                return true;
-            }
-        }
-        return false;
+    // Language-specific archives are optional; no build/version marker is
+    // required for user-provided data. Check a few actual startup resources.
+    static const char* required[] = {
+        "art/frontend/scrooby/bootup.p3d", "art/frontend/scrooby/ingame.p3d",
+        "scripts/ss.mfk", "soundfx.rcf", "scripts.rcf", "dialog.rcf",
+        "ambience.rcf", "carsound.rcf", "music00.rcf", "music01.rcf",
+        "music02.rcf", "music03.rcf", "nis.rcf"
+    };
+    for (unsigned i = 0; i < sizeof(required)/sizeof(required[0]); ++i) {
+        char path[MAX_ASSET_PATH];
+        snprintf(path, sizeof(path), "%s/%s", mOutputRoot, required[i]);
+        struct stat st;
+        if (stat(path, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size == 0) return true;
     }
+    return false;
+}
 
+bool GameAssetExtractor::MigrateLegacyAssets()
+{
+    const char* docs = iOSGetDocumentsDir();
+    if (!docs) return false;
+    for (unsigned i = 0; i < sizeof(GAME_ASSET_ITEMS)/sizeof(GAME_ASSET_ITEMS[0]); ++i) {
+        char from[MAX_ASSET_PATH], to[MAX_ASSET_PATH];
+        snprintf(from, sizeof(from), "%s/%s", docs, GAME_ASSET_ITEMS[i]);
+        snprintf(to, sizeof(to), "%s/%s", mOutputRoot, GAME_ASSET_ITEMS[i]);
+        struct stat source, destination;
+        if (lstat(from, &source) != 0) {
+            if (errno == ENOENT) continue;
+            SetLastError("Cannot inspect previously installed game data.");
+            return false;
+        }
+        if (lstat(to, &destination) == 0) continue;
+        if (errno != ENOENT || rename(from, to) != 0) {
+            SetLastError("Cannot move previously installed game data into game folder.");
+            return false;
+        }
+    }
     return true;
 }
 
@@ -214,15 +240,11 @@ bool GameAssetExtractor::CopyAssetTree( const char* relativePath )
 
     // Bundle source root.
     char bundleRoot[ MAX_ASSET_PATH ];
-#if SDL_MAJOR_VERSION < 3
     const char* basePath = SDL_GetBasePath();
-#else
-    char* basePath = SDL_GetBasePath();
-#endif
     const char* srcBase = ( basePath != NULL && basePath[ 0 ] != '\0' ) ? basePath : "";
     snprintf( bundleRoot, sizeof( bundleRoot ), "%s%s", srcBase, GAME_ASSET_BUNDLE_ROOT );
-#if SDL_MAJOR_VERSION >= 3
-    if ( basePath != NULL ) { SDL_free( basePath ); }
+#if SDL_MAJOR_VERSION < 3
+    SDL_free((void*)basePath);
 #endif
 
     char srcPath[ MAX_ASSET_PATH ];
@@ -442,47 +464,6 @@ bool GameAssetExtractor::FileExistsAtOutput( const char* relativePath ) const
     char full[ MAX_ASSET_PATH ];
     snprintf( full, sizeof( full ), "%s/%s", mOutputRoot, relativePath );
     return FileExists( full );
-}
-
-//=============================================================================
-// WriteVersionFile / IsVersionFileValid
-//=============================================================================
-bool GameAssetExtractor::WriteVersionFile()
-{
-    char path[ MAX_ASSET_PATH ];
-    snprintf( path, sizeof( path ), "%s/%s", mOutputRoot, GAME_ASSET_VERSION_FILE );
-
-    FILE* f = fopen( path, "w" );
-    if ( f == NULL )
-    {
-        SetLastError( "Cannot write game-assets version file." );
-        return false;
-    }
-    fprintf( f, "%s\n", GAME_ASSET_VERSION_TAG );
-    fclose( f );
-    return true;
-}
-
-bool GameAssetExtractor::IsVersionFileValid() const
-{
-    char path[ MAX_ASSET_PATH ];
-    snprintf( path, sizeof( path ), "%s/%s", mOutputRoot, GAME_ASSET_VERSION_FILE );
-
-    FILE* f = fopen( path, "r" );
-    if ( f == NULL )
-    {
-        return false;
-    }
-
-    char buf[ 32 ] = { 0 };
-    if ( fgets( buf, sizeof( buf ), f ) == NULL )
-    {
-        fclose( f );
-        return false;
-    }
-    fclose( f );
-
-    return strncmp( buf, GAME_ASSET_VERSION_TAG "\n", sizeof( GAME_ASSET_VERSION_TAG ) + 1 ) == 0;
 }
 
 //=============================================================================
