@@ -1,6 +1,7 @@
+> iOS: these mappings are inherited from the Android port. The controller test claims below describe upstream testing; compatibility with individual iOS controllers needs verification. Report iOS issues in this repository.
+
 # Controles del juego  &#x1F3AE;
 
-[Discord](https://discord.gg/6Gw6jTJv8w)
 ## &#x1F1EA;&#x1F1F8; Espa&#x00F1;ol — Controles para mando externo  &#x1F3AE;
 
 Se puede jugar con diversos mandos, pero aquí se utilizarán los nombres de los botones de PlayStation como ejemplo para ilustrar los controles.  

@@ -1,4 +1,4 @@
-# 🎮 Simpsons Hit & Run Port para Android
+# 🎮 Simpsons Hit & Run Port para iOS
 
 🌍 **Idiomas disponibles**
 
@@ -209,7 +209,7 @@ A A X Y
 
 ---
 
-### 🚀 Coche cohete especial (nuevo truco exclusivo de la version android )
+### 🚀 Coche cohete especial (truco heredado del port de Android )
 
 **PlayStation**  
 🔺 ❌ ❌ 🔺
@@ -222,7 +222,7 @@ X B B X
 
 ---
 
-### 🚝 Monorraíl especial (nuevo truco exclusivo de la version android )
+### 🚝 Monorraíl especial (truco heredado del port de Android )
 
 **PlayStation**  
 ⬛ ⭕ ❌ 🔺
@@ -235,7 +235,7 @@ Y A B X
 
 ---
 
-### 🚤 Barco especial de Lisa (nuevo truco exclusivo de la version android )
+### 🚤 Barco especial de Lisa (truco heredado del port de Android )
 
 **PlayStation**  
 ⭕ ⬛ ❌ ❌
@@ -248,7 +248,7 @@ A Y B B
 
 ---
 
-### 🚙 ATV especial (Quad) (nuevo truco exclusivo de la version android )
+### 🚙 ATV especial (Quad) (truco heredado del port de Android )
 
 **PlayStation**  
 ⭕ ⬛ ❌ ⬛
@@ -261,7 +261,7 @@ A Y B Y
 
 ---
 
-### 🚛 Monster Truck especial (nuevo truco exclusivo de la version android )
+### 🚛 Monster Truck especial (truco heredado del port de Android )
 
 **PlayStation**  
 🔺 ⬛ 🔺 ⬛
@@ -274,7 +274,7 @@ X Y X Y
 
 ---
 
-### 🚓 Sedán especial de Bart (nuevo truco exclusivo de la version android )
+### 🚓 Sedán especial de Bart (truco heredado del port de Android )
 
 **PlayStation**  
 ⭕ 🔺 ❌ ⬛
@@ -287,7 +287,7 @@ A X B Y
 
 ---
 
-### 🤖 Coche RC especial (nuevo truco exclusivo de la version android )
+### 🤖 Coche RC especial (truco heredado del port de Android )
 
 **PlayStation**  
 ❌ ❌ 🔺 🔺
@@ -343,7 +343,7 @@ X A X A
 
 ## ❌ Desactivar Cheats
 
-### 🚫 Desactivar todos los trucos (nuevo truco exclusivo de la version android )
+### 🚫 Desactivar todos los trucos (truco heredado del port de Android )
 
 **PlayStation**  
 ❌ 🔺 🔺 ❌
@@ -560,7 +560,7 @@ A A X Y
 
 ---
 
-### 🚀 Special Rocket Car (New exclusive cheat for the Android version)
+### 🚀 Special Rocket Car (Cheat inherited from the Android port)
 
 **PlayStation**  
 🔺 ❌ ❌ 🔺
@@ -573,7 +573,7 @@ X B B X
 
 ---
 
-### 🚝 Special Monorail Car (New exclusive cheat for the Android version)
+### 🚝 Special Monorail Car (Cheat inherited from the Android port)
 
 **PlayStation**  
 ⬛ ⭕ ❌ 🔺
@@ -586,7 +586,7 @@ Y A B X
 
 ---
 
-### 🚤 Special Lisa Boat (New exclusive cheat for the Android version)
+### 🚤 Special Lisa Boat (Cheat inherited from the Android port)
 
 **PlayStation**  
 ⭕ ⬛ ❌ ❌
@@ -599,7 +599,7 @@ A Y B B
 
 ---
 
-### 🚙 Special ATV (Quad) (New exclusive cheat for the Android version)
+### 🚙 Special ATV (Quad) (Cheat inherited from the Android port)
 
 **PlayStation**  
 ⭕ ⬛ ❌ ⬛
@@ -612,7 +612,7 @@ A Y B Y
 
 ---
 
-### 🚛 Special Monster Truck (New exclusive cheat for the Android version)
+### 🚛 Special Monster Truck (Cheat inherited from the Android port)
 
 **PlayStation**  
 🔺 ⬛ 🔺 ⬛
@@ -625,7 +625,7 @@ X Y X Y
 
 ---
 
-### 🚓 Special Bart Sedan (New exclusive cheat for the Android version)
+### 🚓 Special Bart Sedan (Cheat inherited from the Android port)
 
 **PlayStation**  
 ⭕ 🔺 ❌ ⬛
@@ -638,7 +638,7 @@ A X B Y
 
 ---
 
-### 🤖 Special RC Car (New exclusive cheat for the Android version)
+### 🤖 Special RC Car (Cheat inherited from the Android port)
 
 **PlayStation**  
 ❌ ❌ 🔺 🔺
@@ -694,7 +694,7 @@ X A X A
 
 ## ❌ Disable Cheats
 
-### 🚫 Disable All Cheats (New exclusive cheat for the Android version)
+### 🚫 Disable All Cheats (Cheat inherited from the Android port)
 
 **PlayStation**  
 ❌ 🔺 🔺 ❌
@@ -909,7 +909,7 @@ A A X Y
 
 ---
 
-### 🚀 Voiture fusée spéciale (Nouveau cheat exclusif de la version Android)
+### 🚀 Voiture fusée spéciale (Cheat hérité du port Android)
 
 **PlayStation**  
 🔺 ❌ ❌ 🔺
@@ -922,7 +922,7 @@ X B B X
 
 ---
 
-### 🚝 Monorail spécial (Nouveau cheat exclusif de la version Android)
+### 🚝 Monorail spécial (Cheat hérité du port Android)
 
 **PlayStation**  
 ⬛ ⭕ ❌ 🔺
@@ -935,7 +935,7 @@ Y A B X
 
 ---
 
-### 🚤 Bateau spécial de Lisa (Nouveau cheat exclusif de la version Android)
+### 🚤 Bateau spécial de Lisa (Cheat hérité du port Android)
 
 **PlayStation**  
 ⭕ ⬛ ❌ ❌
@@ -948,7 +948,7 @@ A Y B B
 
 ---
 
-### 🚙 Quad (ATV) spécial (Nouveau cheat exclusif de la version Android)
+### 🚙 Quad (ATV) spécial (Cheat hérité du port Android)
 
 **PlayStation**  
 ⭕ ⬛ ❌ ⬛
@@ -961,7 +961,7 @@ A Y B Y
 
 ---
 
-### 🚛 Monster Truck spécial (Nouveau cheat exclusif de la version Android)
+### 🚛 Monster Truck spécial (Cheat hérité du port Android)
 
 **PlayStation**  
 🔺 ⬛ 🔺 ⬛
@@ -974,7 +974,7 @@ X Y X Y
 
 ---
 
-### 🚓 Berline spéciale de Bart (Nouveau cheat exclusif de la version Android)
+### 🚓 Berline spéciale de Bart (Cheat hérité du port Android)
 
 **PlayStation**  
 ⭕ 🔺 ❌ ⬛
@@ -987,7 +987,7 @@ A X B Y
 
 ---
 
-### 🤖 Voiture RC spéciale (Nouveau cheat exclusif de la version Android)
+### 🤖 Voiture RC spéciale (Cheat hérité du port Android)
 
 **PlayStation**  
 ❌ ❌ 🔺 🔺
@@ -1043,7 +1043,7 @@ X A X A
 
 ## ❌ Désactiver les cheats
 
-### 🚫 Désactiver tous les cheats (Nouveau cheat exclusif de la version Android)
+### 🚫 Désactiver tous les cheats (Cheat hérité du port Android)
 
 **PlayStation**  
 ❌ 🔺 🔺 ❌
@@ -1259,7 +1259,7 @@ A A X Y
 
 ---
 
-### 🚀 Spezial-Raketenauto (Neuer exklusiver Cheat für die Android-Version)
+### 🚀 Spezial-Raketenauto (Aus dem Android-Port übernommener Cheat)
 
 **PlayStation**  
 🔺 ❌ ❌ 🔺
@@ -1272,7 +1272,7 @@ X B B X
 
 ---
 
-### 🚝 Spezial-Monorail-Fahrzeug (Neuer exklusiver Cheat für die Android-Version)
+### 🚝 Spezial-Monorail-Fahrzeug (Aus dem Android-Port übernommener Cheat)
 
 **PlayStation**  
 ⬛ ⭕ ❌ 🔺
@@ -1285,7 +1285,7 @@ Y A B X
 
 ---
 
-### 🚤 Spezial-Lisa-Boot (Neuer exklusiver Cheat für die Android-Version)
+### 🚤 Spezial-Lisa-Boot (Aus dem Android-Port übernommener Cheat)
 
 **PlayStation**  
 ⭕ ⬛ ❌ ❌
@@ -1298,7 +1298,7 @@ A Y B B
 
 ---
 
-### 🚙 Spezial-ATV (Quad) (Neuer exklusiver Cheat für die Android-Version)
+### 🚙 Spezial-ATV (Quad) (Aus dem Android-Port übernommener Cheat)
 
 **PlayStation**  
 ⭕ ⬛ ❌ ⬛
@@ -1311,7 +1311,7 @@ A Y B Y
 
 ---
 
-### 🚛 Spezial-Monster-Truck (Neuer exklusiver Cheat für die Android-Version)
+### 🚛 Spezial-Monster-Truck (Aus dem Android-Port übernommener Cheat)
 
 **PlayStation**  
 🔺 ⬛ 🔺 ⬛
@@ -1324,7 +1324,7 @@ X Y X Y
 
 ---
 
-### 🚓 Spezial-Bart-Limousine (Neuer exklusiver Cheat für die Android-Version)
+### 🚓 Spezial-Bart-Limousine (Aus dem Android-Port übernommener Cheat)
 
 **PlayStation**  
 ⭕ 🔺 ❌ ⬛
@@ -1337,7 +1337,7 @@ A X B Y
 
 ---
 
-### 🤖 Spezial-RC-Auto (Neuer exklusiver Cheat für die Android-Version)
+### 🤖 Spezial-RC-Auto (Aus dem Android-Port übernommener Cheat)
 
 **PlayStation**  
 ❌ ❌ 🔺 🔺
@@ -1393,7 +1393,7 @@ X A X A
 
 ## ❌ Cheats deaktivieren
 
-### 🚫 Alle Cheats deaktivieren (Neuer exklusiver Cheat für die Android-Version)
+### 🚫 Alle Cheats deaktivieren (Aus dem Android-Port übernommener Cheat)
 
 **PlayStation**  
 ❌ 🔺 🔺 ❌
