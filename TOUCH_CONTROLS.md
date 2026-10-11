@@ -2,6 +2,8 @@
 
 Touch controls and their icons are included with the app and are inherited from Carlox33's Android port. They switch layouts for menus, on-foot play and driving.
 
+Touch controls hide automatically while a physical gamepad is connected and return when the last gamepad disconnects. This also applies when a controller is already connected at launch.
+
 Use the in-game touch customization menu to adjust button placement and size. The generated configuration is stored in:
 
 ```text

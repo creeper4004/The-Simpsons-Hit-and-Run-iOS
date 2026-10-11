@@ -1,4 +1,7 @@
 #include <input/touch/touchinputmodemanager.h>
+#if defined(RAD_IOS)
+#include <SDL.h>
+#endif
 
 TouchInputModeManager& TouchInputModeManager::GetInstance()
 {
@@ -12,6 +15,9 @@ TouchInputModeManager::TouchInputModeManager()
     mGamepadCandidate(false),
     mGamepadConnected( false ),
     mTouchHudEnabled( true ),
+#if defined(RAD_IOS)
+    mIosPhysicalGamepadConnected( false ),
+#endif
     mGamepadInputThreshold( 0.20f ),
     mTimeMs( 0 ),
     mLastTouchInputTimeMs( 0 ),
@@ -29,6 +35,9 @@ void TouchInputModeManager::Reset()
     mGamepadCandidate = false;
     mGamepadConnected = false;
     mTouchHudEnabled = true;
+#if defined(RAD_IOS)
+    mIosPhysicalGamepadConnected = false;
+#endif
     mGamepadInputThreshold = 0.20f;
     mTimeMs = 0;
     mLastTouchInputTimeMs = 0;
@@ -38,6 +47,21 @@ void TouchInputModeManager::Reset()
 void TouchInputModeManager::Update( unsigned int elapsedMs )
 {
     mTimeMs += elapsedMs;
+#if defined(RAD_IOS)
+    // Reconcile the device list each frame: covers startup, hot-plugging,
+    // and removal of one controller while another remains connected.
+    // Keyboard/mouse, accelerometer and SDL virtual devices must not hide UI.
+    mIosPhysicalGamepadConnected = false;
+    const int joystickCount = SDL_NumJoysticks();
+    for ( int i = 0; i < joystickCount; ++i )
+    {
+        if ( SDL_IsGameController( i ) && !SDL_JoystickIsVirtual( i ) )
+        {
+            mIosPhysicalGamepadConnected = true;
+            break;
+        }
+    }
+#endif
 }
 
 void TouchInputModeManager::NotifyTouchInput()

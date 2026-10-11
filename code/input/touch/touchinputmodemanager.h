@@ -66,6 +66,9 @@ private:
     bool mGamepadCandidate;
     bool mGamepadConnected;
     bool mTouchHudEnabled;
+#if defined(RAD_IOS)
+    bool mIosPhysicalGamepadConnected;
+#endif
 
     float mGamepadInputThreshold;
 
@@ -127,9 +130,14 @@ inline bool TouchInputModeManager::IsTouchHudEnabled() const
 
 inline bool TouchInputModeManager::ShouldShowTouchHud() const
 {
-     return mTouchHudEnabled &&
+#if defined(RAD_IOS)
+    // Hide controls for a real gamepad, even before its first button press.
+    return mTouchHudEnabled && !mIosPhysicalGamepadConnected && IsTouchMode();
+#else
+    return mTouchHudEnabled &&
            !IsTouchInputBlockedByGamepad() &&
            IsTouchMode();
+#endif
 }
 
 inline void TouchInputModeManager::SetGamepadInputThreshold( float threshold )
