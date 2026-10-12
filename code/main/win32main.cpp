@@ -115,6 +115,7 @@ static void LogOutputFunction( void *userdata, int category, SDL_LogPriority pri
 // Escribe a Documents/ (leible via `devicectl device copy from`).
 extern "C" const char* iOSGetDocumentsDir(void);
 extern "C" void iOSInitializePersistentDiagnostics();
+extern "C" void iOSShowGameLauncher();
 extern "C" void iOSDiagnosticEvent(const char*, const char*);
 extern "C" void iOSProgress(const char* stage)
 {
@@ -300,6 +301,10 @@ extern "C" int main( int argc, char *argv[] )
     iOSProgress( "win32:InitializeWindow-OK" );
 #endif
 #ifdef RAD_IOS
+    // Prepare/migrate existing data, then let the native launcher handle
+    // missing files and imports before any game-rendered screens are loaded.
+    GameAssetExtractor::GetInstance().EnsureAssetsExtracted();
+    iOSShowGameLauncher();
     if (!GameAssetExtractor::GetInstance().EnsureAssetsExtracted()) {
         fprintf(stderr, "[iOS] %s\n", GameAssetExtractor::GetInstance().GetLastError());
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Game data needed",

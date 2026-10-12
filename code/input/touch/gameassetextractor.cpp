@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <input/touch/iosgamedatarequirements.h>
 
 #if SDL_MAJOR_VERSION < 3
 #include <SDL_stdinc.h>   // SDL_free
@@ -172,21 +173,7 @@ bool GameAssetExtractor::BuildOutputRoot()
 //=============================================================================
 bool GameAssetExtractor::NeedsExtraction() const
 {
-    // Language-specific archives are optional; no build/version marker is
-    // required for user-provided data. Check a few actual startup resources.
-    static const char* required[] = {
-        "art/frontend/scrooby/bootup.p3d", "art/frontend/scrooby/ingame.p3d",
-        "scripts/ss.mfk", "soundfx.rcf", "scripts.rcf", "dialog.rcf",
-        "ambience.rcf", "carsound.rcf", "music00.rcf", "music01.rcf",
-        "music02.rcf", "music03.rcf", "nis.rcf"
-    };
-    for (unsigned i = 0; i < sizeof(required)/sizeof(required[0]); ++i) {
-        char path[MAX_ASSET_PATH];
-        snprintf(path, sizeof(path), "%s/%s", mOutputRoot, required[i]);
-        struct stat st;
-        if (stat(path, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size == 0) return true;
-    }
-    return false;
+    return !IOSGameDataReady(mOutputRoot);
 }
 
 bool GameAssetExtractor::MigrateLegacyAssets()

@@ -678,7 +678,12 @@ if(IOS)
 	add_executable(SimpsonsIOS
 		"main/iosshell.cpp"
 		"main/iosdocuments.mm"  # bridge ObjC++: devuelve el directorio Documents/ (NSDocumentDirectory)
+		"main/ioslauncher.mm"
+		"${CMAKE_SOURCE_DIR}/ios-project/Assets.xcassets"
 	)
+	set_source_files_properties("${CMAKE_SOURCE_DIR}/ios-project/Assets.xcassets"
+		PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+	set_source_files_properties("main/ioslauncher.mm" PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 	set_target_properties(SimpsonsIOS PROPERTIES
 		OUTPUT_NAME "Simpsons"
 		MACOSX_BUNDLE TRUE
@@ -686,6 +691,7 @@ if(IOS)
 		MACOSX_BUNDLE_BUNDLE_NAME "Simpsons Hit & Run"
 		XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
 		XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "15.0"
+		XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon"
 	)
 	# Firmar para dispositivo real (iphoneos). El simulador no necesita firma.
 	# Pasar -DSRR2_SIGN=ON al configurar para habilitar (auto-signing con la
@@ -753,6 +759,7 @@ if(IOS)
 		OpenAL
 		${OPENGLES_FRAMEWORK}
 		${UIKit_FRAMEWORK}
+		"-framework UniformTypeIdentifiers"
 		${CoreAudio_FRAMEWORK}
 		${AudioToolbox_FRAMEWORK}
 		${CoreFoundation_FRAMEWORK}

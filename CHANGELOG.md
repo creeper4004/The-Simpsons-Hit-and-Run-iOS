@@ -1,5 +1,14 @@
 # iOS changelog
 
+## Unreleased
+
+- Added a native iOS setup launcher with folder import, startup-file checks, import cancellation and a Play action.
+- Imports stage new files before replacing game data and retain saves/settings outside the game folder.
+- Added the app icon for iPhone and iPad.
+- Integrated IndecentDad's physical-controller touch-control visibility fix.
+
+The launcher has passed device/simulator builds and startup-file validation tests; full-size folder import still needs physical-device testing.
+
 ## 0.1 — first public iOS release
 
 - Device IPA for arm64 iPhone/iPad, requiring users to sign it for their device.

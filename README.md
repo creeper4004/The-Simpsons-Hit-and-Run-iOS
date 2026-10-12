@@ -41,4 +41,6 @@ This project is unofficial and is not affiliated with or endorsed by the game's 
 
 ## Development
 
+Current development builds include a native setup screen for importing and checking your PC game folder before selecting Play. See [setup launcher notes](ios-project/LAUNCHER.md) for import behavior and current limitations. The published 0.1 IPA predates this screen.
+
 The iOS app uses SDL2, the game's engine, FFmpeg, OpenAL Soft and MGL's OpenGL-on-Metal translation. Build helpers are in [ios-project](ios-project); renderer build notes are in [mgl-ios/README](mgl-ios/README). Public builds should leave `SRR2_IOS_EMBED_GAME_ASSETS` disabled. [Release checklist](RELEASING.md).
