@@ -19,6 +19,7 @@
 // bridge (iosdocuments.mm): tamano en pixeles del drawable principal.
 extern "C" void iOSGetScreenPixelSize(int* outW, int* outH);
 extern "C" const char* iOSGetDocumentsDir(void);
+extern "C" void iOSRecordGameFrame(void);
 
 // --- MGL (OpenGL-on-Metal): the GL implementation on iOS 26/27 (EAGL
 // drawables are dead there). MGL exports the gl* API + C context funcs;
@@ -1348,7 +1349,10 @@ void pglDisplay::SwapBuffers(void)
 {
 #if defined(RAD_IOS)
     if (s_iosMGLContext)
+    {
         MGLswapBuffers(NULL);
+        iOSRecordGameFrame();
+    }
 #else
     SDL_GL_SwapWindow(win);
 #endif

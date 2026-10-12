@@ -115,6 +115,7 @@ static void LogOutputFunction( void *userdata, int category, SDL_LogPriority pri
 // Escribe a Documents/ (leible via `devicectl device copy from`).
 extern "C" const char* iOSGetDocumentsDir(void);
 extern "C" void iOSInitializePersistentDiagnostics();
+extern "C" void iOSConfigureRuntimeSettings();
 extern "C" void iOSShowGameLauncher();
 extern "C" void iOSDiagnosticEvent(const char*, const char*);
 extern "C" void iOSProgress(const char* stage)
@@ -190,6 +191,7 @@ extern "C" void iOSRuntimeLog(const char* subsystem, const char* message)
 extern "C" int main( int argc, char *argv[] )
 {
 #ifdef RAD_IOS
+    iOSConfigureRuntimeSettings();
     iOSInitializePersistentDiagnostics();
     iOSProgress( "main:enter" );
 #endif

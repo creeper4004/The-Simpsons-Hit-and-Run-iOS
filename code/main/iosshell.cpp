@@ -32,13 +32,16 @@
 #include <TargetConditionals.h>
 #include <atomic>
 #include "diagnostics/persistentlog.h"
+#include "iossettings.h"
+#include <initializer_list>
+#include "iossettingspolicy.h"
 
 static PersistentLog s_healthLog;
 static std::atomic<int> s_gameContext(-1);
 static std::atomic<unsigned> s_inputState(0);
 extern "C" void iOSStartHealthMonitor();
 extern "C" void iOSDiagnosticEvent(const char* event, const char* detail) {
-    s_healthLog.Write(event, detail);
+    if (iOSDetailedDiagnosticsEnabled() || IOSBasicDiagnosticEvent(event)) s_healthLog.Write(event, detail);
 }
 extern "C" void iOSDiagnosticFlush() { s_healthLog.Flush(); }
 extern "C" void iOSUpdateDiagnosticContext(int context, unsigned inputState) {
@@ -137,6 +140,20 @@ static void SignalHandler(int sig, siginfo_t* info, void*)
     _exit(128 + sig);
 }
 
+extern "C" void iOSClearDiagnostics() {
+    s_healthLog.Clear();
+    fflush(stdout); fflush(stderr);
+    struct stat st;
+    if (fstat(STDERR_FILENO, &st) == 0 && S_ISREG(st.st_mode)) { ftruncate(STDERR_FILENO, 0); lseek(STDERR_FILENO, 0, SEEK_SET); }
+    if (s_crashFd >= 0) { ftruncate(s_crashFd, 0); lseek(s_crashFd, 0, SEEK_SET); }
+    const char* docs = iOSGetDocumentsDir();
+    if (docs) {
+        for (const char* name : {"srr2_console.previous.log", "srr2_runtime_diag.txt", "srr2_diag.txt"}) {
+            char path[1024]; snprintf(path, sizeof(path), "%s/%s", docs, name); unlink(path);
+        }
+    }
+}
+
 extern "C" void iOSInitializePersistentDiagnostics()
 {
     const char* docs = iOSGetDocumentsDir();
@@ -190,6 +207,7 @@ extern "C" void iOSSampleRuntimeHealth()
             }
         }
     }
+    if (!iOSDetailedDiagnosticsEnabled()) return;
     task_vm_info_data_t memory = {};
     mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
     kern_return_t result = task_info(mach_task_self(), TASK_VM_INFO,

@@ -6,11 +6,11 @@ An arm64 device on iOS/iPadOS 15 or later, an iOS build signed for your device, 
 
 ## 1. Install the app
 
-The `0.1` release IPA is an unsigned device build. Use an iOS sideloading tool that signs IPAs with your own Apple account, then install it on your iPhone or iPad. It is not an App Store or universally signed IPA; signing validity and renewal depend on your account and installation method.
+Release IPAs are unsigned device builds. Use an iOS sideloading tool that signs IPAs with your own Apple account, then install it on your iPhone or iPad. It is not an App Store or universally signed IPA; signing validity and renewal depend on your account and installation method.
 
 Follow the installation/signing instructions supplied with the iOS build you downloaded. If your download is source code rather than an IPA, it must be built and signed before it can run on a device. APK files are for Android and cannot be used here.
 
-Open **Simpsons Hit & Run** once. The app creates its data folders and may display a message that game data is missing. Close the app before copying files.
+Open **Simpsons Hit & Run**. In version 0.2, the setup screen lets you **Import game folder**, **Check files**, open **Settings**, and select **Play** when startup files are present. You can still transfer data manually with Files or Finder; close the app before a manual transfer. See [launcher settings](ios-project/SETTINGS.md).
 
 ## 2. Prepare your game files
 

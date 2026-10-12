@@ -2,6 +2,9 @@
 #define TOUCHINPUTMODEMANAGER_H_
 
 #include <input/touch/touchtypes.h>
+#if defined(RAD_IOS)
+#include <main/iossettingspolicy.h>
+#endif
 
 //=============================================================================
 // TouchInputModeManager
@@ -21,6 +24,9 @@ public:
     static TouchInputModeManager& GetInstance();
 
     void Reset();
+#if defined(RAD_IOS)
+    void SetIosTouchVisibility(int policy) { mIosTouchVisibility = policy; }
+#endif
 
     void Update( unsigned int elapsedMs );
 
@@ -68,6 +74,7 @@ private:
     bool mTouchHudEnabled;
 #if defined(RAD_IOS)
     bool mIosPhysicalGamepadConnected;
+    int mIosTouchVisibility;
 #endif
 
     float mGamepadInputThreshold;
@@ -110,9 +117,8 @@ inline bool TouchInputModeManager::IsGamepadConfirmed() const
 inline bool TouchInputModeManager::IsTouchInputBlockedByGamepad() const
 {
 #if defined(RAD_IOS)
-    // iOS sideload is touch-primary; the simulator / SDL may report a
-    // virtual gamepad which must not suppress the touch HUD.
-    return false;
+    // Hidden controls must also stop accepting touch input.
+    return !ShouldShowTouchHud();
 #else
     return mGamepadConnected;
 #endif
@@ -132,7 +138,7 @@ inline bool TouchInputModeManager::ShouldShowTouchHud() const
 {
 #if defined(RAD_IOS)
     // Hide controls for a real gamepad, even before its first button press.
-    return mTouchHudEnabled && !mIosPhysicalGamepadConnected && IsTouchMode();
+    return mTouchHudEnabled && IOSShowTouchControls(mIosTouchVisibility, mIosPhysicalGamepadConnected) && IsTouchMode();
 #else
     return mTouchHudEnabled &&
            !IsTouchInputBlockedByGamepad() &&

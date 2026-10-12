@@ -17,6 +17,7 @@ TouchInputModeManager::TouchInputModeManager()
     mTouchHudEnabled( true ),
 #if defined(RAD_IOS)
     mIosPhysicalGamepadConnected( false ),
+    mIosTouchVisibility( 0 ),
 #endif
     mGamepadInputThreshold( 0.20f ),
     mTimeMs( 0 ),
@@ -37,6 +38,7 @@ void TouchInputModeManager::Reset()
     mTouchHudEnabled = true;
 #if defined(RAD_IOS)
     mIosPhysicalGamepadConnected = false;
+    mIosTouchVisibility = 0;
 #endif
     mGamepadInputThreshold = 0.20f;
     mTimeMs = 0;

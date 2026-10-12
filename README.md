@@ -14,10 +14,10 @@ The minimum OS target does not guarantee acceptable performance on every device.
 
 ## Getting started
 
-1. Install the iOS app using the instructions accompanying your build.
-2. Open it once to create its folders, then close it. A missing-game-data message is expected.
-3. Copy your PC game data into **Files → On My iPhone / On My iPad → Simpsons Hit & Run → game**.
-4. Reopen the app and play in landscape orientation.
+1. Sign and install the iOS IPA using the instructions accompanying the release.
+2. Open the app and choose **Import game folder**, selecting your installed retail PC game folder through Files. You can also transfer files manually into **Files → On My iPhone / On My iPad → Simpsons Hit & Run → game**.
+3. Open **Settings** to adjust touch opacity, controller visibility, camera sensitivity, FPS display and diagnostics. See [settings and save backups](ios-project/SETTINGS.md).
+4. Select **Play** after the startup-file check passes.
 
 The `game` folder must directly contain `art`, `movies`, `scripts`, `sound` and the `.rcf` archives. See the [complete folder layout and transfer instructions](INSTALLATION.md). Updates retain data; deleting the app removes its files and saves, so back them up first.
 
@@ -41,6 +41,6 @@ This project is unofficial and is not affiliated with or endorsed by the game's 
 
 ## Development
 
-Current development builds include a native setup screen for importing and checking your PC game folder before selecting Play. See [setup launcher notes](ios-project/LAUNCHER.md) for import behavior and current limitations. The published 0.1 IPA predates this screen.
+Version 0.2 includes a native setup screen for importing and checking your PC game folder before selecting Play. See [setup launcher notes](ios-project/LAUNCHER.md) for import behavior and current limitations.
 
 The iOS app uses SDL2, the game's engine, FFmpeg, OpenAL Soft and MGL's OpenGL-on-Metal translation. Build helpers are in [ios-project](ios-project); renderer build notes are in [mgl-ios/README](mgl-ios/README). Public builds should leave `SRR2_IOS_EMBED_GAME_ASSETS` disabled. [Release checklist](RELEASING.md).

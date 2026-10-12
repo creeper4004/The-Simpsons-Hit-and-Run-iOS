@@ -1,7 +1,7 @@
-# Native setup launcher (development)
+# Native setup launcher
 
-Development builds show a UIKit launcher before loading the game engine's UI.
-The published 0.1 IPA predates this feature.
+Version 0.2 shows a UIKit launcher before loading the game engine's UI.
+The 0.1 IPA predates this feature.
 
 - Existing `Documents/game` data is recognized; select Play to continue.
 - Import game folder opens the iOS Files directory picker. Select the root of
@@ -19,7 +19,9 @@ The published 0.1 IPA predates this feature.
 - Keep the app foregrounded during import. An import needs temporary free
   storage in addition to any existing game data. Cloud files must be accessible
   through their file provider; provider/storage errors are shown to the user.
-- Settings remain in the game for this first version. Region follows the build.
+- [Launcher settings](SETTINGS.md) cover touch controls, camera preferences,
+  FPS display, diagnostic reports and save backup/export. Other game settings
+  remain available in-game. Region follows the build.
 
 The launcher uses system controls and a system car symbol, with no retail
 screenshots, game backgrounds or bundled game data. It is independent of the

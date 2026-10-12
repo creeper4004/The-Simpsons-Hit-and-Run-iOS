@@ -1,6 +1,6 @@
 # iOS changelog
 
-## Unreleased
+## 0.2 — setup, settings and diagnostics
 
 - Fixed MGL texture deletion leaving an active texture slot with a null pointer, which caused a renderer assertion during New Game/front-end transitions. Also corrected texture-mask shifts for higher texture units.
 
@@ -9,7 +9,12 @@
 - Added the app icon for iPhone and iPad.
 - Integrated IndecentDad's physical-controller touch-control visibility fix.
 
-The launcher has passed device/simulator builds and startup-file validation tests; full-size folder import still needs physical-device testing.
+- Added touch-opacity sliders, automatic/always-show/always-hide controller visibility, camera sensitivity and invert-Y settings.
+- Added an optional compact FPS/frame-interval counter.
+- Basic logging is the default; Detailed adds performance samples and bounded runtime traces. Repeated texture-upload chatter is disabled in Basic mode.
+- Added diagnostic report export, log clearing, save-slot backup/export and settings reset.
+
+Validated device/simulator builds, automated settings/logging/texture tests, native settings interactions and save-backup copying. The user confirmed folder import, the New Game crash fix, FPS display and controller visibility on an iPhone 17 Pro Max running iOS 27.2 beta. Full-story completion and broad device/edition compatibility remain unverified.
 
 ## 0.1 — first public iOS release
 

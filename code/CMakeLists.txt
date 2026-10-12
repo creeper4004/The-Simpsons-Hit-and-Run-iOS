@@ -679,11 +679,12 @@ if(IOS)
 		"main/iosshell.cpp"
 		"main/iosdocuments.mm"  # bridge ObjC++: devuelve el directorio Documents/ (NSDocumentDirectory)
 		"main/ioslauncher.mm"
+		"main/iossettings.mm"
 		"${CMAKE_SOURCE_DIR}/ios-project/Assets.xcassets"
 	)
 	set_source_files_properties("${CMAKE_SOURCE_DIR}/ios-project/Assets.xcassets"
 		PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
-	set_source_files_properties("main/ioslauncher.mm" PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+	set_source_files_properties("main/ioslauncher.mm" "main/iossettings.mm" PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 	set_target_properties(SimpsonsIOS PROPERTIES
 		OUTPUT_NAME "Simpsons"
 		MACOSX_BUNDLE TRUE

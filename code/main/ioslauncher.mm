@@ -2,6 +2,7 @@
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <input/touch/iosgamedatarequirements.h>
+#include "iossettings.h"
 
 extern "C" const char* iOSGetDocumentsDir(void);
 
@@ -70,7 +71,8 @@ static void RecoverImport() {
     UILabel* note = [self label:@"Bring your own retail PC game files. No game data is included with this app." style:UIFontTextStyleBody];
     note.textColor = UIColor.secondaryLabelColor;
     UIButton* help = [self button:@"What files do I need?" action:@selector(help) prominent:NO];
-    UIStackView* intro = [[UIStackView alloc] initWithArrangedSubviews:@[symbol,title,subtitle,region,note,help]];
+    UIButton* settings = [self button:@"Settings" action:@selector(settings) prominent:NO];
+    UIStackView* intro = [[UIStackView alloc] initWithArrangedSubviews:@[symbol,title,subtitle,region,note,help,settings]];
     intro.axis = UILayoutConstraintAxisVertical; intro.spacing = 12; intro.alignment = UIStackViewAlignmentLeading;
     self.status = [self label:@"Set up your game" style:UIFontTextStyleTitle2];
     self.detail = [self label:@"" style:UIFontTextStyleBody]; self.detail.textColor = UIColor.secondaryLabelColor;
@@ -118,6 +120,7 @@ static void RecoverImport() {
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
+- (void)settings { if (!self.importing) iOSPresentSettings(self); }
 - (void)help {
     [self message:@"Use your PC game folder" text:@"Choose a folder containing art, movies, scripts, sound and the .rcf archives from your retail PC installation. Download cloud files first. Console ISOs and ZIP archives are not supported in this version.\n\nFiles/Finder transfers still work: put the contents in this app’s game folder. This build does not verify the data’s region or every archive’s integrity."];
 }
@@ -203,6 +206,7 @@ static void RecoverImport() {
 }
 - (void)startGame {
     [self checkFiles]; if (!self.play.enabled) return;
+    iOSConfigureRuntimeSettings();
     self.finished = YES;
 }
 @end

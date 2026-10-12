@@ -1,3 +1,6 @@
+#if defined(RAD_IOS)
+#include "iossettings.h"
+#endif
 //=============================================================================
 // Copyright (C) 2002 Radical Entertainment Ltd.  All rights reserved.
 //
@@ -781,6 +784,9 @@ void Game::Initialize()
     TouchAssetManager::GetInstance().Initialize();
     // Cargamos la configuración personalizada de controles táctiles del jugador (en caso de que exista) antes de inicializar el sistema de renderizado de iconos 
     TouchControlsConfigurationManager::GetInstance().Initialize();
+#if defined(RAD_IOS)
+    iOSApplyInputSettings();
+#endif
 
     // Realizamos inicializacion del render, pero aqui no es donde solicitamos el renderizado,solo iniciamos el sistema de render
     TouchHudRenderer::GetInstance().Initialize();

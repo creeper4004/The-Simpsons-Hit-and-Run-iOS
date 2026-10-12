@@ -58,6 +58,12 @@ public:
         pthread_mutex_unlock(&mutex);
         return written == length;
     }
+    void Clear() {
+        pthread_mutex_lock(&mutex);
+        if (fd >= 0) { ftruncate(fd, 0); lseek(fd, 0, SEEK_SET); }
+        unlink(previous); sequence = 0;
+        pthread_mutex_unlock(&mutex);
+    }
     void Flush() { pthread_mutex_lock(&mutex); if (fd >= 0) fsync(fd); pthread_mutex_unlock(&mutex); }
 private:
     PersistentLog(const PersistentLog&);
