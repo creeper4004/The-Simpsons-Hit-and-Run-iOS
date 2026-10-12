@@ -1,5 +1,18 @@
 # Shader interface regression probe
 
+## Texture binding/deletion regression
+
+```sh
+python3 mgl-ios/iosbuild/probes/texture_binding_probe.py
+```
+
+This CPU probe compiles the actual `mglBindTexture` and `mglDeleteTextures`
+functions with minimal context/storage stubs and UndefinedBehaviorSanitizer.
+It covers all 128 mask bits, unbinding, deletion, inactive target bindings,
+image-unit cleanup and preservation of unrelated textures. The old deletion
+implementation fails the active-mask assertion. This does not validate Metal
+pixels or replace a physical-device New Game/loading-transition test.
+
 ## Automatic simulator timeline capture
 
 From the repository root, after building the simulator app:

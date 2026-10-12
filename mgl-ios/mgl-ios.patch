@@ -77,7 +77,7 @@ index 4a6f0f7..8adb2e5 100644
          unsigned x, y, z;
      } local_workgroup_size;
 diff --git a/MGL/src/MGLRenderer.m b/MGL/src/MGLRenderer.m
-index 31cb54e..b613fcd 100755
+index 31cb54e..e54bd41 100755
 --- a/MGL/src/MGLRenderer.m
 +++ b/MGL/src/MGLRenderer.m
 @@ -35,6 +35,33 @@
@@ -442,6 +442,24 @@ index 31cb54e..b613fcd 100755
          }
 
          tex->params.mtl_data = (void *)CFBridgingRetain([self createMTLSamplerForTexParam:&tex->params target:tex->target]);
+@@ -2487,7 +2662,7 @@ - (bool)bindActiveTexturesToMTL
+         {
+             for(int bitpos=0; bitpos<32; bitpos++)
+             {
+-                if (mask & (0x1 << bitpos))
++                if (mask & (1u << bitpos))
+                 {
+                     Texture *tex;
+
+@@ -2498,7 +2673,7 @@ - (bool)bindActiveTexturesToMTL
+                 }
+
+                 // early out
+-                if ((mask >> (bitpos + 1)) == 0)
++                if (bitpos == 31 || (mask >> (bitpos + 1)) == 0)
+                     break;
+             }
+         }
 @@ -2693,7 +2868,7 @@ - (id)newDrawBuffer:(MTLPixelFormat)pixelFormat isDepthStencil:(bool)depthStenci
  {
      id<MTLTexture> texture;
@@ -2142,7 +2160,7 @@ index 383c2a0..2df35f4 100644
  }
 -
 diff --git a/MGL/src/textures.c b/MGL/src/textures.c
-index 93e73ca..7f0f3b1 100644
+index 93e73ca..bb18ac1 100644
 --- a/MGL/src/textures.c
 +++ b/MGL/src/textures.c
 @@ -32,6 +32,32 @@
@@ -2178,7 +2196,37 @@ index 93e73ca..7f0f3b1 100644
  bool texSubImage(GLMContext ctx, Texture *tex, GLuint face, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, void *pixels);
 
  GLuint textureIndexFromTarget(GLMContext ctx, GLenum target)
-@@ -422,10 +448,9 @@ void mglDeleteTextures(GLMContext ctx, GLsizei n, const GLuint *textures)
+@@ -290,7 +316,7 @@ void mglBindTexture(GLMContext ctx, GLenum target, GLuint texture)
+     active_texture = STATE(active_texture);
+
+     GLuint mask_index = active_texture / 32;
+-    GLuint mask = (0x1 << active_texture);
++    GLuint mask = (1u << (active_texture % 32));
+
+     if (ptr)
+     {
+@@ -407,9 +433,19 @@ void mglDeleteTextures(GLMContext ctx, GLsizei n, const GLuint *textures)
+                 if(ctx->state.active_textures[i] == tex)
+                 {
+                     ctx->state.active_textures[i] = NULL;
+-
++                    ctx->state.active_texture_mask[i / 32] &= ~(1u << (i % 32));
+                     ctx->state.dirty_bits |= DIRTY_TEX_BINDING;
+                 }
++                // Bindings for other targets can reference the same object even
++                // when it is not the currently active texture for this unit.
++                for (int target = 0; target < _MAX_TEXTURE_TYPES; ++target)
++                {
++                    if (ctx->state.texture_units[i].textures[target] == tex)
++                    {
++                        ctx->state.texture_units[i].textures[target] = NULL;
++                        ctx->state.dirty_bits |= DIRTY_TEX_BINDING;
++                    }
++                }
+             }
+
+             for(int i=0; i<TEXTURE_UNITS; i++)
+@@ -422,10 +458,9 @@ void mglDeleteTextures(GLMContext ctx, GLsizei n, const GLuint *textures)
                  }
              }
 
@@ -2192,7 +2240,7 @@ index 93e73ca..7f0f3b1 100644
          }
      }
  }
-@@ -600,32 +625,7 @@ static size_t page_size_align(size_t size)
+@@ -600,32 +635,7 @@ static size_t page_size_align(size_t size)
 
  void invalidateTexture(GLMContext ctx, Texture *tex)
  {
@@ -2226,7 +2274,7 @@ index 93e73ca..7f0f3b1 100644
  }
 
  void initBaseTexLevel(GLMContext ctx, Texture *tex, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth)
-@@ -1222,7 +1222,9 @@ bool createTextureLevel(GLMContext ctx, Texture *tex, GLuint face, GLint level,
+@@ -1222,7 +1232,9 @@ bool createTextureLevel(GLMContext ctx, Texture *tex, GLuint face, GLint level,
      {
          case MTLPixelFormatDepth16Unorm:
          case MTLPixelFormatDepth32Float:
@@ -2236,7 +2284,7 @@ index 93e73ca..7f0f3b1 100644
          case MTLPixelFormatDepth32Float_Stencil8:
              tex->mtl_requires_private_storage = true;
              break;
-@@ -1234,6 +1236,12 @@ bool createTextureLevel(GLMContext ctx, Texture *tex, GLuint face, GLint level,
+@@ -1234,6 +1246,12 @@ bool createTextureLevel(GLMContext ctx, Texture *tex, GLuint face, GLint level,
 
      if (tex->mtl_requires_private_storage == false)
      {
@@ -2249,7 +2297,7 @@ index 93e73ca..7f0f3b1 100644
          // Allocate directly from VM
          err = vm_allocate((vm_map_t) mach_task_self(),
                            (vm_address_t*) &texture_data,
-@@ -2511,4 +2519,3 @@ void mglSampleCoverage(GLMContext ctx, GLfloat value, GLboolean invert)
+@@ -2511,4 +2529,3 @@ void mglSampleCoverage(GLMContext ctx, GLfloat value, GLboolean invert)
      // Stub - sample coverage is a hint for multisampling
      fprintf(stderr, "MGL: glSampleCoverage called (stub) value=%f invert=%d\n", value, invert);
  }

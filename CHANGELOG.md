@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed MGL texture deletion leaving an active texture slot with a null pointer, which caused a renderer assertion during New Game/front-end transitions. Also corrected texture-mask shifts for higher texture units.
+
 - Added a native iOS setup launcher with folder import, startup-file checks, import cancellation and a Play action.
 - Imports stage new files before replacing game data and retain saves/settings outside the game folder.
 - Added the app icon for iPhone and iPad.
